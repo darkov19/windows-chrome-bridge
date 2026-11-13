@@ -234,15 +234,16 @@ with test_mode():
             # 3 s after a click, with no tool call running, the page opens a tab, then a popup window (one click
             # each: Chrome allows one window.open per click). Chrome may bring them to the front; the foreground
             # check fails if QA Chrome stays there.
-            before = {x["id"] for w in call(c, "qa_tabs")["windows"] for x in w["tabs"]}
+            u = call(c, "qa_tabs", action="new", url=ROOT_PAGE + "later", snapshot=False)["tabId"]
             for button in ("#tabLater", "#windowLater"):
-                call(c, "qa_click", tabId=t, selector=button, snapshot=False)
+                call(c, "qa_click", tabId=u, selector=button, snapshot=False)
                 time.sleep(6)
-            later = [x for w in call(c, "qa_tabs")["windows"] for x in w["tabs"] if x["id"] not in before]
+            later = [x for w in call(c, "qa_tabs")["windows"] for x in w["tabs"] if x.get("openedBy") == u]
             for x in later:
                 call(c, "qa_tabs", action="adopt", tabId=x["id"])
                 call(c, "qa_tabs", action="close", tabId=x["id"])
-            ok("page_opens_later", len(later) == 2 and all(x.get("openedBy") == t for x in later))
+            call(c, "qa_tabs", action="close", tabId=u)
+            ok("page_opens_later", len(later) == 2)
 
         call(c, "qa_storage", tabId=t, area="local", action="set", key="qa", value="storage")
         ok("storage", call(c, "qa_storage", tabId=t, area="local", action="get", key="qa")["value"] == "storage")
