@@ -310,8 +310,9 @@ static class Lifecycle {
             try {
                 var reply = PipeCall(output, input, 1, "Extensions.loadUnpacked",
                     new Dictionary<string, object> { { "path", folder } });
-                // Chrome keeps the cached service worker when the files changed but the version did not.
-                // Then a second load (a reload) is needed. Do it only then: a reload while the first
+                // Chrome can keep the cached service worker of the extension it loaded at the last start,
+                // also after an upgrade to another version. Then a second load (a reload) is needed.
+                // Do it only when the extension changed: on a new profile, a reload while the first
                 // service worker connects leaves an orphan native host that holds the pipe name.
                 if (!reply.ContainsKey("error") && NeedsReload(folder))
                     reply = PipeCall(output, input, 2, "Extensions.loadUnpacked",
@@ -441,8 +442,8 @@ static class Lifecycle {
     }
 
     // The extension version and a hash of its files, as loaded at the last start, are kept in
-    // <profile>\windows-chrome-bridge-extension.txt. A reload is needed only when the version is the
-    // same and the files are not.
+    // <profile>\windows-chrome-bridge-extension.txt. A reload is needed when this profile loaded
+    // another version or other files before. A new profile has no record and needs none.
     static bool NeedsReload(string folder) {
         string version = Config.Version;
         var all = new StringBuilder();
@@ -459,7 +460,7 @@ static class Lifecycle {
         string now = version + " " + hash;
         string before = File.Exists(record) ? File.ReadAllText(record).Trim() : null;
         File.WriteAllText(record, now);
-        return before != null && before != now && before.StartsWith(version + " ");
+        return before != null && before != now;
     }
 
     // One CDP call over the pipe: JSON messages end with a NUL byte. Events are skipped.

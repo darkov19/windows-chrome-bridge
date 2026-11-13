@@ -372,9 +372,6 @@ class Bridge {
         string id = h == null ? null : Str(h, "extensionId");
         string version = h == null ? null : Str(h, "version");
         string instance = h == null ? null : Str(h, "instance");
-        if (instance != Config.Instance)
-            throw new Exception("Extension handshake failed: the extension belongs to instance \"" + instance +
-                "\" but qa-bridge.exe to \"" + Config.Instance + "\"");
         if (id != Config.ExtensionId)
             throw new Exception("Extension handshake failed: extension id is " + id + ", expected " +
                 Config.ExtensionId);
@@ -383,6 +380,10 @@ class Bridge {
                 " but qa-bridge.exe is " + Config.Version +
                 ". QA Chrome was started by another release. Close QA Chrome; the next start loads the " +
                 "extension of this release");
+        // After the version: an extension from before 0.6.0 has no instance, and the version says so.
+        if (instance != Config.Instance)
+            throw new Exception("Extension handshake failed: the extension belongs to instance \"" + instance +
+                "\" but qa-bridge.exe to \"" + Config.Instance + "\"");
     }
 
     // Answer the first request with the reason, then close.

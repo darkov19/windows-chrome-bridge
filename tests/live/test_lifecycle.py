@@ -187,6 +187,28 @@ with test_mode(maxSessions=3, maxTabsPerSession=2, keepOutputDays=3):
             ok("crash_reported", "Lost the connection" in refused(lambda: c.result("qa_session")))
             ok("crash_recovered", c.result("qa_session")["version"] == VERSION)
         ok("recovered_chrome_stopped", eventually(closed_down, seconds=40))
+
+        # An upgrade: at the next start the extension has another version and another script. QA Chrome must
+        # run the new script. Chrome keeps the cached script of the version before unless the extension is reloaded.
+        extension = EXE.parent / "extension"
+        before = {f: (extension / f).read_bytes() for f in ("manifest.json", "background.js")}
+        script = before["background.js"].replace(b"    version: VERSION,\n    ...(INSTANCE", b"    version: VERSION,\n    upgraded: true,\n    ...(INSTANCE")
+        try:
+            (extension / "manifest.json").write_bytes(before["manifest.json"].replace(b'"' + VERSION.encode() + b'"', b'"' + VERSION.encode() + b'.1"'))
+            (extension / "background.js").write_bytes(script)
+            with Client(EXE) as c:
+                c.initialize()
+                info = c.result("qa_session")
+                ok("upgrade_runs_new_script", script != before["background.js"] and info["version"] == VERSION + ".1" and info.get("upgraded") is True)
+            ok("upgraded_chrome_stopped", eventually(closed_down, seconds=40))
+        finally:
+            for f, data in before.items():
+                (extension / f).write_bytes(data)
+        with Client(EXE) as c:
+            c.initialize()
+            info = c.result("qa_session")
+            ok("downgrade_runs_old_script", info["version"] == VERSION and "upgraded" not in info)
+        ok("downgraded_chrome_stopped", eventually(closed_down, seconds=40))
         print("ALL PASS", flush=True)
     finally:
         for c in clients:

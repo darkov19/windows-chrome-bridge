@@ -33,6 +33,10 @@ Versions 0.1.0 to 0.4.2 were private builds for one machine.
 
 - The display-mode live test `qa_chrome_never_in_front` failed now and then at the moment a test page opened a popup.
   It now fails only if QA Chrome is still in front 1 s later, and it prints the short moments.
+- After an upgrade, QA Chrome kept running the extension script of the version before, from Chrome's
+  service worker cache. The extension reported the new version, so nothing showed it. An upgrade from 0.5.0
+  failed its self-check for this reason. QA Chrome now reloads the extension at the first start after an
+  upgrade or a rollback. A rollback from 0.6.0 to 0.5.0 still has the problem, because 0.5.0 does not reload.
 
 ## 0.5.0 - 2026-11-14
 
