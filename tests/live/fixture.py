@@ -11,7 +11,7 @@ TITLE = "Native authenticated QA fixture"
 HTML = """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>Native authenticated QA fixture</title>
 <h1>Native authenticated QA fixture</h1><form id="login"><input id="user" autocomplete="username"><input id="password" type="password"><input id="hidden" type="hidden"><button id="signin">Sign in</button></form><p id="status">Signed out</p>
 <input id="upload" type="file"><p id="fileStatus"></p><input id="typing"><select id="choice"><option value="a">A</option><option value="b">B</option></select>
-<button id="popup" onclick="window.open('http://localhost:18475/child','_blank')">Popup</button><a id="download" href="/download">Download fixture</a><button id="dialog" onclick="window.answer=prompt('Fixture prompt','default')">Prompt</button>
+<button id="popup" onclick="window.open('http://localhost:18475/child','_blank')">Popup</button><button id="tabLater" onclick="setTimeout(()=>window.open('http://localhost:18475/child','_blank'),3000)">Tab later</button><button id="windowLater" onclick="setTimeout(()=>window.open('http://localhost:18475/child','_blank','popup,width=500,height=400'),3000)">Window later</button><a id="download" href="/download">Download fixture</a><button id="dialog" onclick="window.answer=prompt('Fixture prompt','default')">Prompt</button>
 <button id="mouse">Mouse target</button><div id="drag" style="width:100px;height:50px;background:skyblue">Drag</div><p id="events"></p>
 <iframe id="frame" src="http://localhost:18475/frame"></iframe><div style="height:2000px">Scroll area</div>
 <script>

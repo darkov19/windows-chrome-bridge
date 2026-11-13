@@ -32,40 +32,64 @@ DISPLAY = "--display" in sys.argv[1:]
 
 class Foreground(threading.Thread):
     """Display mode: the Windows foreground window before and after every tool call, and a sampler
-    that reads it all the time in between. A QA Chrome window must never come to the front."""
+    that reads it all the time in between. A QA Chrome window must never stay in front.
+
+    When a page opens a tab or a window, Chrome puts it in front for a moment before the extension
+    can give the focus back (README "Window modes"). So a QA window in front fails the test only if
+    it is still in front 1 s later. Such short moments are counted and printed."""
 
     def __init__(self):
         super().__init__(daemon=True)
         self.calls, self.samples, self.changes, self.hits, self.stop = 0, 0, [], [], threading.Event()
+        self.moments = []
         # The tool call that runs now (or ran last), so a hit says when it happened.
         self.current = None
 
     @staticmethod
     def now():
-        return json.loads(subprocess.run([str(EXE), "--foreground"], capture_output=True, encoding="utf-8").stdout)
+        # Under load, WSL sometimes fails to start the Windows exe and the output is empty. Try again.
+        for _ in range(3):
+            out = subprocess.run([str(EXE), "--foreground"], capture_output=True, encoding="utf-8").stdout
+            if out.strip():
+                return json.loads(out)
+            time.sleep(0.5)
+        # Not RuntimeError: refused() and eventually() would take that for a tool error.
+        raise OSError("qa-bridge.exe --foreground gave no output 3 times (WSL could not start it)")
 
     @staticmethod
     def is_qa(f):
         return f["process"] == "chrome" and f["pid"] in {x["pid"] for x in lifecycle("snapshot")}
 
+    def stays(self, f):
+        """f has a QA window in front. True if QA Chrome is still in front 1 s later."""
+        time.sleep(1)
+        later = self.now()
+        if self.is_qa(later):
+            return True
+        self.moments.append({"during": self.current, **f, "then": later["process"]})
+        return False
+
     def run(self):
         while not self.stop.is_set():
             f = self.now()
             self.samples += 1
-            if self.is_qa(f):
+            if self.is_qa(f) and self.stays(f):
                 self.hits.append({"during": self.current, **f})
 
     def call(self, tool, before):
         after = self.now()
         self.calls += 1
         if after["window"] != before["window"]:
-            self.changes.append({"tool": tool, "from": before["process"], "to": after["process"], "qa": self.is_qa(after)})
+            self.changes.append({"tool": tool, "from": before["process"], "to": after["process"],
+                                 "qa": self.is_qa(after) and self.stays(after)})
 
     def check(self):
         self.stop.set()
         self.join()
-        print("Foreground: %d tool calls, %d samples, %d changes %s, QA Chrome in front in %d samples %s"
-              % (self.calls, self.samples, len(self.changes), self.changes, len(self.hits), self.hits), flush=True)
+        print("Foreground: %d tool calls, %d samples, %d changes %s, QA Chrome in front in %d samples %s, "
+              "short moments in front %d %s"
+              % (self.calls, self.samples, len(self.changes), self.changes, len(self.hits), self.hits,
+                 len(self.moments), self.moments), flush=True)
         ok("qa_chrome_never_in_front", not self.hits and not any(c["qa"] for c in self.changes) and self.samples > 10)
 
 

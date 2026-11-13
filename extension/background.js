@@ -448,18 +448,34 @@ chrome.action.onClicked.addListener(connect);
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 connect();
-// Chrome brings a window to the front by itself, for example when a page opens a popup.
-// While a tool call of a non-visible session runs (and shortly after), give the focus back:
-// focused:false makes Chrome activate the next window below it, normally the one the user had.
-// A user who clicks on a QA window outside tool calls keeps it.
+// Chrome brings a window to the front by itself, for example when a page opens a tab or a popup.
+// While a tool call of a non-visible session runs (and shortly after), and shortly after a page
+// opened a tab or a window, give the focus back: focused:false makes Chrome activate the next
+// window below it, normally the one the user had. A visible session keeps the focus.
+// A person who works in QA Chrome keeps it: a click on a QA window outside these times, and a tab
+// or window opened while a QA window has had the focus for a while.
 let quietCalls = 0,
-  quietUntil = 0;
+  quietUntil = 0,
+  // The QA window that has the focus (WINDOW_ID_NONE: another program has it), and since when.
+  focus = { id: chrome.windows.WINDOW_ID_NONE, since: 0 };
+const visibleSession = () => [...sessions.values()].some(x => x.visible);
 chrome.windows.onFocusChanged.addListener(windowId => {
+  focus = { id: windowId, since: Date.now() };
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
   if (quietCalls === 0 && Date.now() > quietUntil) return;
-  if ([...sessions.values()].some(x => x.visible)) return;
+  if (visibleSession()) return;
   chrome.windows.update(windowId, { focused: false }).catch(() => {});
 });
+// A new tab or window, at any time. Chrome may raise its window just before or just after this event.
+function opened() {
+  const now = Date.now();
+  if (focus.id !== chrome.windows.WINDOW_ID_NONE && now - focus.since > 500) return;
+  quietUntil = Math.max(quietUntil, now + 1500);
+  if (focus.id !== chrome.windows.WINDOW_ID_NONE && !visibleSession())
+    chrome.windows.update(focus.id, { focused: false }).catch(() => {});
+}
+chrome.tabs.onCreated.addListener(opened);
+chrome.windows.onCreated.addListener(opened);
 chrome.tabs.onRemoved.addListener(forget);
 chrome.debugger.onDetach.addListener(src => {
   const rec = recordings.get(src.tabId);
