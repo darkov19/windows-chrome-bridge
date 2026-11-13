@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Windows Chrome Bridge",
+  "version": "0.5.0",
+  "description": "Lets an AI agent in WSL control this Chrome profile through Windows Chrome Bridge.",
+  "permissions": [
+    "debugger",
+    "nativeMessaging",
+    "tabs",
+    "downloads",
+    "offscreen",
+    "system.display"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Connect Windows Chrome Bridge"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtGvrviEwr4Yl20/D66XIZaz4h3j+l3jHgCPnL5Rc0NJBqUoO+ZMCONeOVjy53+DYPHfyW5xigKi/lNfgVpvFHOoLEkdYxB4PkD8G9GghyUb33N0qOHp5YN7Zl5t13giDknBW2ApwN7nJ3WYAfWHMaOPuqOldEgYrons3SaduRiDV7FujgxnFuIChCd1KbZ/HcqigRFgNHSiINXTk0L0YJwIxPZU/vLNIs9/mytzv35l5eAV0o6BSr/8mhda5h9Podt8XJcWZ22o6Ljtp69qWb2c/WH8CLSOnk8qa5m0JOGhm9aNv8KzuVDuFCBVSo50r1Pw9jsyfpwJ5pN07sBHrXwIDAQAB"
+}

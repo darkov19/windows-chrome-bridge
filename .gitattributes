@@ -1,0 +1,5 @@
+# Keep LF in the repository and in every checkout, on Windows too.
+* text=auto eol=lf
+*.exe binary
+*.zip binary
+*.png binary

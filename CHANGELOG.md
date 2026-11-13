@@ -1,0 +1,200 @@
+# Changelog
+
+All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the project uses [Semantic Versioning](https://semver.org/).
+Before 1.0.0, a minor version (0.x.0) may change tools or settings in ways that are not backward compatible.
+
+Versions 0.1.0 to 0.4.2 were private builds for one machine.
+
+## 0.5.0 - 2026-11-14
+
+The first public version.
+
+### Added
+
+- `manage.py`: one command to install from WSL (`install`), plus `doctor`, `stop`, `rollback` and `uninstall`.
+  It builds the exe or uses a release zip, registers the native host, writes a default `bridge-config.json`,
+  runs a self-check, and adds the MCP server to Claude Code or Codex only when you say yes.
+- Release zip with a prebuilt `qa-bridge.exe`, and GitHub Actions for build, unit tests and releases.
+- The extension is loaded at every QA Chrome start with no clicks (a keeper process and `Extensions.loadUnpacked`).
+- Window modes: `display` (background windows on a chosen screen) or `headless`. No tool call takes the
+  Windows focus unless the session called `qa_session(visible: true)`.
+- Page reads as an accessibility tree: one short line per element (role, name, state, value) with a ref like `e12`.
+  Views: controls only, one subtree, a depth, one frame, a text search. Frames are read inline (`f1e6`).
+  Password fields are marked `[password]` and their values are never shown. A field with no name shows its id,
+  name or placeholder attribute (`[id="user"]`).
+- Only the changes: after the first read of a page, `qa_snapshot` returns what was added, removed or changed since
+  your last read. `full: true` gives the whole tree. A new page always gives the whole tree.
+- The page after an action: click, fill, type, hover, scroll, drag, upload, wait, dialog, navigate and new tab wait
+  until the page settles and return the changes. `snapshot: false` leaves them out.
+- `qa_batch`: up to 50 tool calls on one tab in one call. It stops at the first failure and checks every step
+  like a single call, including the site policy.
+- `qa_fill` sets many fields in one call: text, password, select (by value or label), checkbox and radio.
+- `file` on `qa_snapshot`, `qa_screenshot`, `qa_eval`, `qa_console` and `qa_network`: the output is saved in
+  `<install folder>\output\<session>\` and the result gives a path that WSL can open.
+- `qa_screenshot`: `maxSize` limits the pixel size. An image in the result is at most 2000 px by default, and the
+  result says when it was scaled down (`scaledFrom`). A screenshot saved with `file` keeps the full size.
+- `qa_network`: requests of the last 3 pages with filters and paging; one request with headers and bodies.
+  Secret headers and body fields are hidden unless `showSecrets: true`.
+- `qa_console`: console messages and page errors of the last 3 pages, with level and text filters, paging,
+  source and stack. A filter that matches nothing gives the count of each level (`qa_network`: of each type).
+- `qa_wait` waits for a text, for a text to go away, or for a URL.
+- `qa_cdp(events: true)`: the events of the domains you enabled with `qa_cdp`.
+- Tool groups: `toolGroups` in `bridge-config.json`. Default: core, debug and files (21 of the 25 tools).
+- Several agents: `qa_session(name)`; tab lists show the owner's name; `qa_tabs(action: "keep")` keeps a tab open
+  at cleanup and disconnect; `maxSessions` and `maxTabsPerSession` in `bridge-config.json`.
+- `policy.json` version 2: `allow` and `block` lists with exact origins or `*.site`, and `strict` mode, where
+  navigation is limited too. `manage.py doctor` shows the active policy.
+- `qa_record`: an MP4 (H.264) video of a claimed tab, from `start` to `stop`, saved in the output folder.
+  It works headless, in display mode and for a background tab, with no focus change and no click.
+  It stops by itself at `maxSeconds`, at 9.5 MB, or when the tab closes, and the file is saved at stop or session end.
+- `qa_perf`: load times, Core Web Vitals (LCP, CLS, INP), long tasks and the slowest resources (`metrics`);
+  CPU and network throttling (`throttle`); memory after a garbage collection (`memory`); a leak check that repeats
+  steps and reports the growth (`leak`); a DevTools trace file (`trace`). It replaces the old `qa_diagnostics` metrics.
+- `keepOutputDays` in `bridge-config.json` (default 7): old session output folders are removed when QA Chrome starts.
+- MIT license, README, SECURITY, CONTRIBUTING.
+
+### Changed
+
+These tool changes are not backward compatible with 0.4.x. 42 tools became 25.
+
+| Before | Now |
+|---|---|
+| `qa_health` | `qa_session` with no arguments. It also takes `name`. |
+| `qa_tabs`, `qa_windows` | `qa_tabs` (`action: "list"`): windows with their tabs and owners |
+| `qa_tab_new` | `qa_tabs` `action: "new"`. It now waits for the load and returns the page read |
+| `qa_adopt`, `qa_release`, `qa_close`, `qa_cleanup` | `qa_tabs` `action: "adopt"`, `"release"`, `"close"`, `"cleanup"` |
+| `qa_transfer` (`targetSessionId`) | `qa_tabs` `action: "transfer"`, `toSession` (a session name or id) |
+| `qa_window_close` | removed. Close the window's tabs with `qa_tabs` `close` |
+| `qa_snapshot` (DOM summary: text and controls, `maxElements`, `maxTextChars`) | `qa_snapshot`: the accessibility tree as text, `maxChars` |
+| `qa_accessibility` | removed. Use `qa_snapshot`, or `qa_cdp` `Accessibility.getFullAXTree` |
+| `qa_frames` | removed. Frames have names (`f1`) in the page read, and `frameId` takes them |
+| `qa_click_text` | `qa_click` with `text` |
+| `qa_click` result `clicked, status: "delivered", trusted, terminalEvent, events` | `{clicked: true}`, and the page changes |
+| `qa_fill` (`selector` or `ref`, `text`) | `qa_fill` with `fields: [{ref or selector, value}]` |
+| `qa_select` (`values`) | `qa_fill`; a select field takes `value` or `values` |
+| `qa_key`, `qa_type` | `qa_type` with `text` and/or `key`. The raw key fields (`code`, `text`, `modifiers`, `virtualKeyCode`) are removed; use `qa_cdp` `Input.dispatchKeyEvent` |
+| `qa_navigate` result `url, title, frameId, loaderId` | `loaded`, and the new page read (its first line has the title and URL) |
+| `qa_history` `back`, `forward` | `qa_navigate` `action: "back"` or `"forward"`; also `"reload"` |
+| `qa_history` `tab`, `search` | removed, with the extension's `history` permission. Profile history showed other sessions' pages |
+| `qa_wait` needed `selector` | `selector`, `text`, `textGone` and `url` are all optional |
+| `qa_screenshot` PNG by default | JPEG by default (quality 80); `format: "png"` for PNG |
+| `qa_download`, `qa_downloads`, `qa_download_adopt`, `qa_download_wait` | `qa_downloads` `action: "start"`, `"list"`, `"adopt"`, `"wait"`; `claim` became `owner` |
+| `qa_mobile`, `qa_desktop`, `qa_emulate` (`settings`) | `qa_emulate` with `viewport` (`mobile`), `userAgent`, `geolocation`, `touch`, `reset`. `locale` and `timezone` are removed: Chrome refuses them for extensions |
+| `qa_cookies` | `qa_storage` `area: "cookies"` |
+| `qa_storage` `action: "remove"` | `action: "delete"` |
+| `qa_diagnostics` (`captureDetails`, performance metrics) | `qa_console` and `qa_network`. Console text is recorded by default. Performance metrics: `qa_perf` |
+| `policy.json` version 1, `sensitiveOrigins` | version 2, `allow`, `block`, `strict`. Version 1 is refused with a message |
+| Every tool always listed | `qa_emulate`, `qa_window`, `qa_storage` and `qa_cdp` are off by default (tool groups) |
+
+Other changes:
+
+- New names, so it can be installed next to the private 0.4.x builds: extension "Windows Chrome Bridge",
+  native host `io.github.darkov19.windows_chrome_bridge`, pipe `WindowsChromeBridge-v1-<SID>`,
+  install folder `%LOCALAPPDATA%\windows-chrome-bridge`, `qa_downloads` start saves to `Downloads\ChromeBridge\`.
+- Readable source; `extension/manifest.json` is the one source of the version and the extension id.
+- Tool failures are tool results with `isError: true`, so the agent sees the reason.
+- A tool result with a page read has two text items: the result fields as JSON, then the page text.
+  A screenshot result has the image, then its fields (`width`, `height`, `scaledFrom`) as JSON.
+- `tools/list` leaves out size limits and ranges to save context. The server still checks them.
+- `catalog.json` is now `{groups, defaultGroups, tools}`.
+- A selector must match exactly one element.
+- `qa_storage` `get` without a key returns `{items}`.
+- The native host checks the extension once per connection, not per call, and reports real errors.
+- `qa_cdp` cannot read every cookie, other sites' storage, or the whole profile.
+- The native host stops a QA Chrome that a session started, about 10 s after the last session left, if no window
+  is left. It works also when an agent kills its MCP server at exit, as Claude Code does.
+  `install`, `rollback` and `uninstall` stop a QA Chrome that no session uses, instead of refusing.
+- The native host saves output files (before: the MCP server), so a file is saved also when the agent session ends.
+- With `policy.json`, saving to a file is as sensitive as the tool itself, no more. A page read or screenshot file
+  works on any site that is not blocked.
+- The wait after an action leaves out polling (a request the page sent twice in the 3 s before) and page loads that
+  started before the action. On a page that polls all the time, a click returned after 2.5 s; now at once.
+- The extension has the `offscreen` permission (for the video encoder) and no longer the `history` permission.
+- `manage.py` and `build.py` need Python 3.12 or newer. On an older Python they stop at once and say so.
+- `install` starts the MCP server with `--wsl-distro` and `--wsl-root`, so the bridge knows the agent's WSL distro
+  and where that WSL mounts the Windows drives.
+
+### Fixed
+
+- In strict policy mode, page reads still showed frames of sites that are not allowed. They are left out now.
+- MCP `initialize` always answered protocol version 2025-11-25. It now follows the MCP rule: the client's version when
+  the server supports it (2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25), otherwise 2025-11-25.
+- After 6 failed tries (about 30 s) the extension stopped connecting to the native host, so QA Chrome stayed
+  unusable. It now keeps trying every 15 s.
+- `uninstall` said it removed everything, but a profile that the `profile` setting put elsewhere stayed.
+  It still stays (it holds logins), and `uninstall` now says where it is. Each line says what was removed and what was kept.
+- Tokens in URLs (`?token=`, `?key=`, `#access_token=` and others) were shown in network lists, page reads and tab lists.
+  They are now `(hidden)`, like secret headers; `qa_network` with `showSecrets: true` shows them.
+- Upload paths on a network share (`\\server\share\...`) made Windows connect to that server with your login.
+  `qa_upload` and the file commands of `qa_cdp` now refuse them. WSL paths still work.
+- `/home/...` upload paths used the default WSL distro, not the distro the agent runs in.
+- A WSL with another automount root in `/etc/wsl.conf` (not `/mnt/`) got wrong paths for uploads and output files,
+  and `manage.py` did not find Windows.
+- The first QA Chrome start with a new profile timed out: a second extension load left an orphan
+  native host that held the pipe.
+- A QA Chrome that no session can use is stopped.
+- A QA Chrome stayed running when the session that started it left before the others.
+- A click or key that opened an alert, confirm or prompt waited until the call timed out. It now returns the dialog.
+- `qa_navigate` back to a page from the back/forward cache reported `loaded: false`.
+- Requests that a cross-site frame sent while it loaded were missing from `qa_network`, and the frame's own page
+  load had no size or time. A new cross-site frame now waits until the bridge listens to it.
+- A click on an element inside a cross-site frame never arrived: it used the frame's coordinates and the frame's focus.
+- A screenshot of a tab that is not the active tab of its window could wait until the call timed out, in display mode.
+  After 5 s the bridge now shows the tab in its window for the capture, then shows the tab that was there before.
+
+### Removed
+
+- The old install scripts, pin files, acceptance files and recorder experiments.
+
+## 0.4.2 - 2026-09-08
+
+### Fixed
+
+- Focus emulation is turned off after every click, also when the click fails.
+
+## 0.4.1 - 2026-09-01
+
+### Changed
+
+- `qa_click` and `qa_click_text` report `clicked: true` only when a trusted click event reached the element.
+  Otherwise they return `status: "indeterminate"`.
+
+## 0.4.0 - 2026-09-01
+
+### Added
+
+- 42 tools, described in `catalog.json`: uploads, downloads, `qa_eval`, `qa_cdp`, frames, storage, cookies,
+  history, dialogs, emulation, and tab claims (`qa_adopt`, `qa_release`, `qa_transfer`).
+- Up to 8 MCP clients at once.
+
+### Removed
+
+- The site allowlist. Any http(s) site works.
+
+## 0.3.0 - 2026-09-01
+
+### Added
+
+- `qa_click_text`, `qa_wait` and `qa_window`.
+- A site allowlist file.
+
+## 0.2.0 - 2026-08-31
+
+### Added
+
+- The bridge starts the dedicated QA Chrome by itself, and stops it when it is no longer used.
+- `qa_session` for visible mode.
+
+## 0.1.1 - 2026-08-31
+
+### Fixed
+
+- UTF-8 for MCP input and output.
+
+## 0.1.0 - 2026-08-31
+
+### Added
+
+- First bridge: an MCP server, a Chrome native host on a named pipe, and an extension, with 13 tools.
+  Only a few test sites were allowed.

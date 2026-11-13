@@ -1,0 +1,1211 @@
+{
+  "groups": {
+    "core": "read and use pages",
+    "debug": "console, network and JavaScript",
+    "files": "uploads, downloads and video recordings",
+    "device": "emulation and window size",
+    "data": "storage and cookies",
+    "cdp": "raw Chrome DevTools Protocol"
+  },
+  "defaultGroups": [
+    "core",
+    "debug",
+    "files"
+  ],
+  "tools": [
+    {
+      "group": "core",
+      "name": "qa_session",
+      "description": "This session and the bridge: version, your tabs, window mode, policy, output folder. name: a short name that other sessions see. visible=true brings windows to the front; use it only when the user wants to watch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_tabs",
+      "description": "Tabs of the QA profile. action: list (default; every window and tab with its owner), new (open url in a new claimed tab, wait for load, return the page read), adopt (claim an unclaimed tab, for example a popup), release (give a tab up, leave it open), close, keep (keepOpen: cleanup and disconnect leave the tab open), transfer (to the session toSession), cleanup (close your tabs that are not kept).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "new",
+              "adopt",
+              "release",
+              "close",
+              "keep",
+              "transfer",
+              "cleanup"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "newWindow": {
+            "type": "boolean"
+          },
+          "keepOpen": {
+            "type": "boolean"
+          },
+          "toSession": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_navigate",
+      "description": "Go to url, or action back, forward or reload, in a claimed tab. Waits for load (waitUntil load, domcontentloaded or none). Returns the new page read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "back",
+              "forward",
+              "reload"
+            ]
+          },
+          "waitUntil": {
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "none"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_snapshot",
+      "description": "Read the page as an accessibility tree: one line per element (role, name, state, value) with a ref like [e12] for other tools. After the first read it returns only the changes since your last read; full=true gives the whole tree. Views: interactive (controls only), ref (one subtree), depth, frameId, search (matching lines). Password values are never shown.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "full": {
+            "type": "boolean"
+          },
+          "interactive": {
+            "type": "boolean"
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "maxChars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 1000000
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_click",
+      "description": "Click an element. Target: ref from qa_snapshot, or selector (CSS, exactly one match). Or text: the one visible button, link or menu item with that text. clicked=false means the click was not seen to arrive; check the page before you retry. Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "button": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "middle"
+            ]
+          },
+          "clickCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_fill",
+      "description": "Set form fields: fields=[{ref or selector, value}]. Text and password fields get the text, a select the option with that value or label (values for several), a checkbox or radio \"true\" or \"false\". Fires input and change events. Values are not echoed. Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "selector": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 65536
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "maxItems": 100
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId",
+          "fields"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_type",
+      "description": "Type text into the focused element, or into ref or selector after focusing it. Then press key, if given: a name or chord such as Enter, Tab, Escape, ArrowDown, Control+A. Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_wait",
+      "description": "Wait until the page is loaded and, if given, selector matches, text is on the page, textGone is not, and the tab URL contains url. timeoutMs default 30000. Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "textGone": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_screenshot",
+      "description": "Capture the viewport, the whole page (fullPage), or one element (ref or selector). JPEG by default (quality 80), or png. maxSize limits width and height in pixels (default 2000 for an image in the result; a file keeps the full size).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "fullPage": {
+            "type": "boolean"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "jpeg",
+              "png"
+            ]
+          },
+          "quality": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "maxSize": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 10000
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_batch",
+      "description": "Run up to 50 tool calls on one tab, in order, in one call: steps=[{tool, args}], args without tabId. Stops at the first failure. Returns a short result per step and one page read at the end. Every check of each tool still applies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "args": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "tool"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_dialog",
+      "description": "Inspect, accept or dismiss a JavaScript alert, confirm or prompt.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "accept",
+              "dismiss"
+            ]
+          },
+          "promptText": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId",
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_hover",
+      "description": "Move the mouse over an element. Target: ref from qa_snapshot, or selector (CSS, exactly one match). Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_scroll",
+      "description": "Scroll an element into view (ref or selector), or scroll by deltaX and deltaY pixels at the viewport point x, y (default 100, 100). Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "deltaX": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "deltaY": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "core",
+      "name": "qa_drag",
+      "description": "Drag with the mouse from ref (or fromX, fromY) to toRef (or toX, toY), in steps (default 10). Returns the page changes after the page settles (snapshot=false: none).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "toRef": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "fromX": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "fromY": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "toX": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "toY": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "debug",
+      "name": "qa_console",
+      "description": "Console messages and page errors of a tab, from its last 3 pages, with source and stack. level: error, warning, info or debug (that level and worse). filter: text to find. offset and limit (default 50) page through the list.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "info",
+              "debug"
+            ]
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "debug",
+      "name": "qa_network",
+      "description": "Network requests of a tab, from its last 3 pages: id, method, status, type, size, time, URL. filter: text in the URL; type: document, fetch, xhr, script...; failed=true: errors and status 400+. request: one request with headers and bodies (big bodies: use file). Cookies, tokens (also in URLs) and authorization values are hidden unless showSecrets=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "request": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "failed": {
+            "type": "boolean"
+          },
+          "showSecrets": {
+            "type": "boolean"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "debug",
+      "name": "qa_eval",
+      "description": "Run JavaScript in the page (main world) or a frame. Promises are awaited. Time and output are limited.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "expression": {
+            "type": "string",
+            "maxLength": 131072
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000
+          },
+          "maxOutputBytes": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 10485760
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId",
+          "expression"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "debug",
+      "name": "qa_perf",
+      "description": "Speed and memory of a tab. action: metrics (default; load times, LCP, CLS, INP, long tasks, the limit slowest resources), throttle (cpu: slow-down factor, network: slow-3g, slow-4g, fast-4g, offline or none; then reload to measure), memory (JS heap after garbage collection, DOM nodes, listeners), leak (run steps once, then repeat times; report growth), trace (a DevTools trace of steps, or of a reload, saved to file).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "metrics",
+              "throttle",
+              "memory",
+              "leak",
+              "trace"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cpu": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "slow-3g",
+              "slow-4g",
+              "fast-4g",
+              "offline",
+              "none"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "args": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "tool"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "repeat": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "files",
+      "name": "qa_record",
+      "description": "Record a claimed tab as an MP4 video (H.264), for example as proof for a pull request. action: start (file, maxSeconds default 60, fps default 10, maxSize default 1280 px), stop (saves the file and returns its path), status. A recording also stops at maxSeconds, at 9.5 MB, or when the tab closes; the file is saved at stop or when the session ends.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop",
+              "status"
+            ]
+          },
+          "maxSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "fps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "maxSize": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 1920
+          },
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "files",
+      "name": "qa_upload",
+      "description": "Set files on a file input. Target: ref from qa_snapshot, or selector (CSS, exactly one match). paths: Windows paths or WSL paths (/mnt/c/..., /home/...).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "maxItems": 32
+          },
+          "snapshot": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId",
+          "paths"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "files",
+      "name": "qa_downloads",
+      "description": "Downloads of the QA profile. action: list (default), start (tabId, url and filename: download with the tab's cookies into Downloads\\ChromeBridge\\<session>\\), adopt (claim a download a page started), wait (until your download ends). Files are never opened.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "start",
+              "adopt",
+              "wait"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "downloadId": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "device",
+      "name": "qa_emulate",
+      "description": "Emulate a device on a tab: viewport {width, height, deviceScaleFactor, mobile}, userAgent, geolocation {latitude, longitude, accuracy}, touch. reset=true clears them first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "viewport": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8192
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8192
+              },
+              "deviceScaleFactor": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 5
+              },
+              "mobile": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "userAgent": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "geolocation": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "accuracy": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "touch": {
+            "type": "boolean"
+          },
+          "reset": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "device",
+      "name": "qa_window",
+      "description": "Set the window of a claimed tab to normal, maximized, minimized or fullscreen. Without visible mode, maximized and fullscreen only resize the window, and focus=true is refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "maximized",
+              "minimized",
+              "fullscreen"
+            ]
+          },
+          "focus": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tabId",
+          "state"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "data",
+      "name": "qa_storage",
+      "description": "Read or change localStorage, sessionStorage or cookies of the tab's site. area: local, session or cookies. action: get (key or all), set (key and value; for cookies: cookie {name, value, ...}), delete (key), clear.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "local",
+              "session",
+              "cookies"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "get",
+              "set",
+              "delete",
+              "clear"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "cookie": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "tabId",
+          "area",
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "group": "cdp",
+      "name": "qa_cdp",
+      "description": "Run one raw Chrome DevTools Protocol command on a claimed tab or frame. Commands that reach the whole profile (Target, Browser, Storage, all cookies...) are blocked. events=true returns the events of the domains you enabled with qa_cdp since the last call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "events": {
+            "type": "boolean"
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000
+          },
+          "maxOutputBytes": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 1048576
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

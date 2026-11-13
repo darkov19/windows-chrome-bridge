@@ -1,0 +1,11 @@
+# Build output (python3 build.py)
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+
+# Never commit a built exe or a Chrome profile
+*.exe
+profile/
