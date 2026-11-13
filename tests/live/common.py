@@ -1,12 +1,13 @@
-"""Shared helpers for the live tests. They need Windows, Google Chrome and an installed bridge.
+"""Shared helpers for the live tests. They need Windows, Google Chrome and the test instance.
 
-Each live test runs against the installed version (python3 manage.py install) and uses only the
-local fixture page. It runs QA Chrome headless unless you pass --display: for the run it sets
+Each live test runs against the installed "test" instance (tests/run.py --live installs it), never
+against the normal install, and uses only the local fixture page. It runs QA Chrome headless unless you pass --display: for the run it sets
 windowMode in bridge-config.json and puts the file back afterwards.
 """
 
 import contextlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,8 +17,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
+# The live tests start, stop and reconfigure QA Chrome, so they never touch the normal install.
+os.environ.setdefault("WINDOWS_CHROME_BRIDGE_INSTANCE", "test")
 import manage  # noqa: E402
 
+if not manage.INSTANCE:
+    sys.exit("The live tests never run on the normal install. Unset WINDOWS_CHROME_BRIDGE_INSTANCE or set it to test")
 ROOT = manage.root()
 STATE = manage.read_state(ROOT)
 VERSION = STATE["current"]
@@ -112,11 +117,12 @@ def closed_down():
 def test_mode(**overrides):
     """Check the install, set the window mode and the given settings for the run (by default all tool
     groups), and restore bridge-config.json after it."""
+    install = "Run: python3 tests/run.py --live (it installs the " + manage.INSTANCE + " instance)"
     if not VERSION or not EXE.exists():
-        sys.exit("No installed bridge. Run: python3 manage.py install")
+        sys.exit("The " + manage.INSTANCE + " instance is not installed. " + install)
     source = json.loads((REPO / "extension" / "manifest.json").read_text())["version"]
     if source != VERSION:
-        sys.exit("The installed version is " + VERSION + " but the repo is " + source + ". Run: python3 manage.py install")
+        sys.exit("The " + manage.INSTANCE + " instance is version " + VERSION + " but the repo is " + source + ". " + install)
     # The last session of the test before stops QA Chrome about 10 s after it left.
     end = time.monotonic() + 30
     while not chrome_closed() and time.monotonic() < end:
@@ -131,7 +137,7 @@ def test_mode(**overrides):
     settings.update(overrides)
     settings = {k: v for k, v in settings.items() if v is not None}
     config.write_text(json.dumps(settings, indent=2) + "\n")
-    print("Testing " + VERSION + " (" + settings["windowMode"] + ")", flush=True)
+    print("Testing " + VERSION + " (" + settings["windowMode"] + ", instance " + manage.INSTANCE + ")", flush=True)
     if FOREGROUND:
         FOREGROUND.start()
     try:

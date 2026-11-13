@@ -12,6 +12,10 @@ to %LOCALAPPDATA%\\windows-chrome-bridge, registers the Chrome native host and r
 It adds the MCP server to Claude Code or Codex only when you say yes (a flag or the prompt).
 Run install again from a newer version to upgrade. The version before stays for rollback.
 It needs Python 3.12 or newer.
+
+WINDOWS_CHROME_BRIDGE_INSTANCE=test runs every command on a second, separate install, the "test"
+instance: its own folder, profile, native host, pipes and policy. It never changes agent configs.
+The live tests use it. See CONTRIBUTING.md.
 """
 
 import sys
@@ -37,7 +41,43 @@ import tomllib
 from pathlib import Path
 
 SERVER = "isolated_windows_qa"
-HOST = "io.github.darkov19.windows_chrome_bridge"
+HERE = Path(__file__).resolve().parent
+INSTANCE_VARIABLE = "WINDOWS_CHROME_BRIDGE_INSTANCE"
+
+
+def instance_of(variable, folder):
+    """The instance: "" for the normal install, or a name such as "test" for a separate one.
+
+    An installed copy of manage.py (folder holds versions/) belongs to the instance of its folder.
+    A copy in a clone or a release folder takes WINDOWS_CHROME_BRIDGE_INSTANCE.
+    """
+    name = variable or ""
+    if (folder / "versions").is_dir():
+        mine = folder.name[len("windows-chrome-bridge-"):] if folder.name.startswith("windows-chrome-bridge-") else ""
+        need(variable is None or name == mine,
+             INSTANCE_VARIABLE + " is " + repr(name) + " but this installed copy belongs to " + repr(mine) + ". Unset it")
+        name = mine
+    need(re.fullmatch(r"([a-z][a-z0-9]{0,15})?", name),
+         INSTANCE_VARIABLE + " must be empty or a-z and 0-9, up to 16 letters, for example test")
+    return name
+
+
+class Problem(Exception):
+    """An error with a message for the user."""
+
+
+def need(condition, message):
+    if not condition:
+        raise Problem(message)
+
+
+try:
+    INSTANCE = instance_of(os.environ.get(INSTANCE_VARIABLE), HERE)
+except Problem as e:
+    sys.exit("ERROR: " + str(e))
+# Every name that two installs could share comes from the instance. host/Config.cs makes the same names.
+FOLDER = "windows-chrome-bridge" + ("-" + INSTANCE if INSTANCE else "")
+HOST = "io.github.darkov19.windows_chrome_bridge" + ("_" + INSTANCE if INSTANCE else "")
 REG = "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\" + HOST
 
 
@@ -61,21 +101,11 @@ MOUNT = mount_root(_c_drive())
 C = MOUNT + "c/"
 CMD = C + "Windows/System32/cmd.exe"
 REG_EXE = C + "Windows/System32/reg.exe"
-HERE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = {"windowMode": "display", "screen": "secondary", "windowState": "maximized"}
 BEGIN = "# BEGIN windows-chrome-bridge\n"
 NOTE = "# Written by manage.py. On upgrade it keeps only default_tools_approval_mode.\n"
 END = "# END windows-chrome-bridge\n"
 BACKUP = ".windows-chrome-bridge-backup"
-
-
-class Problem(Exception):
-    """An error with a message for the user."""
-
-
-def need(condition, message):
-    if not condition:
-        raise Problem(message)
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +133,7 @@ def root():
     """The install root. An installed copy of manage.py sits in it, next to versions/."""
     if (HERE / "versions").is_dir():
         return HERE
-    return windows_folder("LOCALAPPDATA") / "windows-chrome-bridge"
+    return windows_folder("LOCALAPPDATA") / FOLDER
 
 
 def reg_value(key=REG):
@@ -502,6 +532,12 @@ def report_health(health):
 
 def choose_agents(args, state):
     """Which agent files to edit: recorded ones, flags, or a yes at the prompt."""
+    if INSTANCE:
+        # A separate instance is for development and tests. It never changes an agent config, so it
+        # cannot take the place of the normal install there.
+        need(not args.claude and not args.codex,
+             "The " + INSTANCE + " instance never changes agent configs. Use the command it prints in a temporary MCP config")
+        return {}
     chosen = dict(state["agents"])
     for agent, info in AGENTS.items():
         flag = getattr(args, agent)
@@ -566,6 +602,8 @@ def install(args):
     shutil.copy2(folder / "qa-bridge.exe", staging / "qa-bridge.exe")
     shutil.copy2(folder / "catalog.json", staging / "catalog.json")
     shutil.copytree(folder / "extension", staging / "extension")
+    # The exe and the extension read the instance from here (host/Config.cs, extension/background.js).
+    save(staging / "extension" / "instance.json", {"instance": INSTANCE})
     if target.exists():
         try:
             # A rename either works or fails as a whole, so a version folder is never half replaced.
@@ -577,7 +615,8 @@ def install(args):
     shutil.rmtree(retired, ignore_errors=True)
     shutil.copy2(HERE / "manage.py", base / "manage.py")
     if not (base / "bridge-config.json").exists():
-        save(base / "bridge-config.json", DEFAULT_CONFIG)
+        # A separate instance is for tests: headless, so it opens no window unless asked.
+        save(base / "bridge-config.json", dict(DEFAULT_CONFIG, windowMode="headless") if INSTANCE else DEFAULT_CONFIG)
     register(base, version)
     new_state = state_after_install(state, version)
     # Keep only the current and the previous version.
@@ -585,7 +624,7 @@ def install(args):
         if old.is_dir() and old.name not in (new_state["current"], new_state["previous"]):
             shutil.rmtree(old, ignore_errors=True)
     save(base / "state.json", new_state)
-    print("Installed " + version + " in " + win(base))
+    print("Installed " + version + " in " + win(base) + (" (instance " + INSTANCE + ")" if INSTANCE else ""))
     if not chrome_path(settings_of(base)):
         print("Google Chrome was not found. Install it, or set \"chrome\" in " + win(base / "bridge-config.json"))
 
@@ -607,7 +646,7 @@ def install(args):
     save(base / "state.json", new_state)
     if not new_state["agents"]:
         print("No agent was changed. For any MCP client, the command is: " + shlex.join([str(exe)] + mcp_args()))
-    print("Done. Restart your agent sessions so they load the tools.")
+    print("Done." + ("" if INSTANCE else " Restart your agent sessions so they load the tools."))
 
 
 def rollback(args):
@@ -680,7 +719,7 @@ def uninstall(args):
     elif what == "removed" and existed:
         print("Removed the QA Chrome profile (its logins and cookies) with it.")
     print("Windows Chrome Bridge is uninstalled. Files that QA Chrome downloaded stay in your Downloads folder "
-          "(qa_downloads start used Downloads\\ChromeBridge).")
+          "(qa_downloads start used Downloads\\ChromeBridge" + ("-" + INSTANCE if INSTANCE else "") + ").")
 
 
 def stop(args):
@@ -716,7 +755,8 @@ def doctor(args):
     chrome = chrome_path(settings)
     report(bool(chrome), "Google Chrome " + ("at " + win(chrome) if chrome else "not found"),
            "Install Google Chrome, or set \"chrome\" in bridge-config.json")
-    if not report(bool(state["current"]), "Installed version: " + str(state["current"]) + " in " + win(base),
+    if not report(bool(state["current"]), "Installed version: " + str(state["current"]) + " in " + win(base)
+                  + (" (instance " + INSTANCE + ")" if INSTANCE else ""),
                   "Run: python3 manage.py install"):
         return 1
     exe = exe_of(base, state["current"])
@@ -739,10 +779,10 @@ def doctor(args):
         report(ok, name + " uses this install (" + path + ")", "Run: python3 manage.py install --" + agent + " " + path)
     for agent, info in AGENTS.items():
         path = default_agent_file(agent)
-        if agent not in state["agents"] and agent_found(agent, path):
+        if not INSTANCE and agent not in state["agents"] and agent_found(agent, path):
             print("note     " + info["name"] + " found at " + str(path) + " but not set up. "
                   "To add it: python3 manage.py install --" + agent)
-    machine = Path(C + "ProgramData/windows-chrome-bridge/policy.json")
+    machine = Path(C + "ProgramData/" + FOLDER + "/policy.json")
     policy_file = machine if machine.exists() else base / "policy.json"
     if not policy_file.exists():
         print("note     No policy.json: every tool works on every site")

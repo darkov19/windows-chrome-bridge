@@ -3,7 +3,7 @@
 Run: python3 tests/live/test_policy.py [--display]
 
 It writes policy.json in the install folder for the run and removes it at the end.
-It stops if C:\\ProgramData\\windows-chrome-bridge\\policy.json exists, because that file would win.
+It stops if C:\\ProgramData\\windows-chrome-bridge-test\\policy.json exists, because that file would win.
 """
 
 import json
@@ -19,8 +19,8 @@ import manage
 LISTED = "http://127.0.0.1:%d" % fixture.PORT
 OTHER = "http://localhost:%d" % fixture.PORT
 policy = ROOT / "policy.json"
-if Path(manage.C + "ProgramData/windows-chrome-bridge/policy.json").exists():
-    sys.exit("A machine policy exists in C:\\ProgramData\\windows-chrome-bridge. This test cannot run")
+if Path(manage.C + "ProgramData/" + manage.FOLDER + "/policy.json").exists():
+    sys.exit("A machine policy exists in C:\\ProgramData\\" + manage.FOLDER + ". This test cannot run")
 if policy.exists():
     sys.exit(str(policy) + " already exists. Move it away first")
 

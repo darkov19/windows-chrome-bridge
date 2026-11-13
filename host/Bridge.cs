@@ -70,12 +70,12 @@ class Bridge {
 
     static string PipeName() {
         string sid = WindowsIdentity.GetCurrent().User.Value;
-        return "WindowsChromeBridge-v1-" + sid;
+        return Config.NamePrefix + "-v1-" + sid;
     }
 
     // The keeper's pipe: one command, a garbage collection of one page (see Lifecycle.GcService).
     internal static string KeeperPipeName() {
-        return "WindowsChromeBridge-keeper-v1-" + WindowsIdentity.GetCurrent().User.Value;
+        return Config.NamePrefix + "-keeper-v1-" + WindowsIdentity.GetCurrent().User.Value;
     }
 
     class Waiter {
@@ -349,12 +349,13 @@ class Bridge {
 
     // Optional policy.json. It is read for each new connection, so a change applies to the next
     // MCP session. The extension checks its format (see README).
-    // %ProgramData%\windows-chrome-bridge\policy.json wins when it exists: an administrator can make
-    // it read-only for the user, so an agent with shell access cannot change it. Otherwise the
-    // install root copy is used; the user (and so an agent shell) can edit that one.
+    // %ProgramData%\windows-chrome-bridge\policy.json (windows-chrome-bridge-<instance> for an instance)
+    // wins when it exists: an administrator can make it read-only for the user, so an agent with shell
+    // access cannot change it. Otherwise the install root copy is used; the user (and so an agent shell)
+    // can edit that one.
     static object ReadPolicy() {
         string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "windows-chrome-bridge", "policy.json");
+            Config.FolderName, "policy.json");
         if (!File.Exists(path)) path = Config.RootFile("policy.json");
         if (!File.Exists(path)) return null;
         try {
@@ -370,6 +371,10 @@ class Bridge {
         var h = reply.ContainsKey("result") ? reply["result"] as Dictionary<string, object> : null;
         string id = h == null ? null : Str(h, "extensionId");
         string version = h == null ? null : Str(h, "version");
+        string instance = h == null ? null : Str(h, "instance");
+        if (instance != Config.Instance)
+            throw new Exception("Extension handshake failed: the extension belongs to instance \"" + instance +
+                "\" but qa-bridge.exe to \"" + Config.Instance + "\"");
         if (id != Config.ExtensionId)
             throw new Exception("Extension handshake failed: extension id is " + id + ", expected " +
                 Config.ExtensionId);
@@ -961,6 +966,9 @@ class Bridge {
                 Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true });
                 Console.SetError(new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true });
             }
+            if (args.Length >= 1 && args[0] != "--version" && args[0] != "--foreground" && !Config.Installed)
+                throw new Exception("This qa-bridge.exe is not installed. Run: python3 manage.py install, then use the " +
+                    "exe in the install folder");
             if (args.Length >= 1 && args[0] == "--mcp") {
                 McpOptions(args);
                 Mcp();

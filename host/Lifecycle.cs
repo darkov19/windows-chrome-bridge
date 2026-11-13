@@ -173,7 +173,7 @@ static class Lifecycle {
     // Chrome hands over to the first and closes its CDP pipe. So the check and the launch run under a
     // mutex that all processes of this Windows user share.
     public static Lease Ensure(bool forSessions) {
-        using (var start = new Mutex(false, @"Local\WindowsChromeBridge-start-" +
+        using (var start = new Mutex(false, @"Local\" + Config.NamePrefix + "-start-" +
             System.Security.Principal.WindowsIdentity.GetCurrent().User.Value)) {
             try {
                 if (!start.WaitOne(90000)) throw new Exception("Another process is still starting QA Chrome after 90 s");

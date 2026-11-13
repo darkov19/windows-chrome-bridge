@@ -13,19 +13,70 @@ static class Config {
         Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 
     static Dictionary<string, object> values, manifest;
-    static string root, profile, chrome, extensionId;
+    static string root, profile, chrome, extensionId, instance;
+
+    // The instance: "" for a normal install, or a short name such as "test" for a second install
+    // that shares nothing with the first (see CONTRIBUTING.md). manage.py writes it in
+    // extension\instance.json of each release, so the exe and the extension read the same value.
+    public static string Instance {
+        get {
+            if (instance == null) {
+                string path = Path.Combine(ExtensionFolder, "instance.json");
+                if (!File.Exists(path)) throw new Exception("extension\\instance.json is missing next to qa-bridge.exe");
+                Dictionary<string, object> data;
+                try {
+                    data = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
+                } catch (Exception e) {
+                    throw new Exception("extension\\instance.json is not valid JSON: " + e.Message);
+                }
+                object v = null;
+                if (data != null) data.TryGetValue("instance", out v);
+                var name = v as string;
+                if (name == null || !System.Text.RegularExpressions.Regex.IsMatch(name, "^([a-z][a-z0-9]{0,15})?$"))
+                    throw new Exception("extension\\instance.json: instance must be \"\" or a-z and 0-9, up to 16 letters");
+                instance = name;
+            }
+            return instance;
+        }
+    }
+
+    // The start of every Windows name of this instance: pipes and the start mutex.
+    // A normal install keeps the names of earlier versions.
+    public static string NamePrefix {
+        get { return Instance.Length == 0 ? "WindowsChromeBridge" : "WindowsChromeBridge-" + Instance; }
+    }
+
+    // The folder name of this instance: in %LOCALAPPDATA% (the install root) and in %ProgramData% (policy.json).
+    public static string FolderName {
+        get { return Instance.Length == 0 ? "windows-chrome-bridge" : "windows-chrome-bridge-" + Instance; }
+    }
 
     public static string Root {
         get {
             if (root == null) {
                 var parent = Directory.GetParent(Dir);
                 if (parent != null && parent.Parent != null &&
-                    String.Equals(parent.Name, "versions", StringComparison.OrdinalIgnoreCase))
+                    String.Equals(parent.Name, "versions", StringComparison.OrdinalIgnoreCase)) {
+                    // A release of one instance never runs in the folder of another: it would use that
+                    // profile with its own pipe names.
+                    if (!String.Equals(parent.Parent.Name, FolderName, StringComparison.OrdinalIgnoreCase))
+                        throw new Exception("This release belongs in a folder named " + FolderName + ", not " +
+                            parent.Parent.Name + ". Install it with manage.py");
                     root = parent.Parent.FullName;
-                else
+                } else
                     root = Dir;
             }
             return root;
+        }
+    }
+
+    // True for a release in <root>\versions\<version>. A build or release folder that was not installed
+    // has the names of the normal install (pipes, native host), so it must not start or reach QA Chrome.
+    public static bool Installed {
+        get {
+            var parent = Directory.GetParent(Dir);
+            return parent != null && parent.Parent != null &&
+                String.Equals(parent.Name, "versions", StringComparison.OrdinalIgnoreCase) && Root != Dir;
         }
     }
 

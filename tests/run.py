@@ -2,15 +2,20 @@
 """Run the tests.
 
   python3 tests/run.py                    unit tests: no Windows, no Chrome (needs Node.js 18+)
-  python3 tests/run.py --live             live tests: the installed bridge, headless QA Chrome
+  python3 tests/run.py --live             live tests: headless QA Chrome of the "test" instance
   python3 tests/run.py --live --display   live tests with real (background) windows
+
+--live first installs this repo as the "test" instance (WINDOWS_CHROME_BRIDGE_INSTANCE=test), a second
+install that shares nothing with the normal one. The live tests run only there. See CONTRIBUTING.md.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
+INSTANCE_VARIABLE = "WINDOWS_CHROME_BRIDGE_INSTANCE"
 LIVE = ["test_capabilities.py", "test_record.py", "test_perf.py", "test_lifecycle.py", "test_policy.py", "test_sessions.py"]
 
 
@@ -22,7 +27,12 @@ def run(command, cwd=TESTS):
 def main():
     args = sys.argv[1:]
     if "--live" in args:
+        os.environ.setdefault(INSTANCE_VARIABLE, "test")
+        if not os.environ[INSTANCE_VARIABLE]:
+            sys.exit("The live tests never run on the normal install. Unset " + INSTANCE_VARIABLE + " or set it to test")
         extra = ["--display"] if "--display" in args else []
+        if not run([sys.executable, str(TESTS.parent / "manage.py"), "install"]):
+            sys.exit("Installing the " + os.environ[INSTANCE_VARIABLE] + " instance failed")
         results = [run([sys.executable, name] + extra, cwd=TESTS / "live") for name in LIVE]
     else:
         results = [

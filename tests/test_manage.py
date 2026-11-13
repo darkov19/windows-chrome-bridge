@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -119,6 +120,29 @@ class Versions(unittest.TestCase):
         )
         with self.assertRaises(m.Problem):
             m.state_after_rollback({"current": "0.5.0", "previous": None, "agents": {}})
+
+
+class Instance(unittest.TestCase):
+    """A separate instance must never fall back to the names of the normal install."""
+
+    def test_from_the_variable_or_the_installed_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp)
+            self.assertEqual(m.instance_of(None, clone), "")
+            self.assertEqual(m.instance_of("test", clone), "test")
+            for bad in ("Test", "te-st", "1test", "a" * 17):
+                with self.assertRaises(m.Problem):
+                    m.instance_of(bad, clone)
+            # The installed copy of manage.py belongs to the instance of its folder.
+            normal, test = clone / "windows-chrome-bridge", clone / "windows-chrome-bridge-test"
+            (normal / "versions").mkdir(parents=True)
+            (test / "versions").mkdir(parents=True)
+            self.assertEqual(m.instance_of(None, test), "test")
+            self.assertEqual(m.instance_of(None, normal), "")
+            with self.assertRaises(m.Problem):
+                m.instance_of("test", normal)
+            with self.assertRaises(m.Problem):
+                m.instance_of("", test)
 
 
 NAME = "C:\\Users\\Jürgen 张伟 Иван\\AppData\\Local"

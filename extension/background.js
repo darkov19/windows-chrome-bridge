@@ -24,7 +24,18 @@ const claims = new Map(),
   kept = new Set();
 let port,
   attempts = 0,
-  retryTimer;
+  retryTimer,
+  // The instance of this release: "" for a normal install, or a name such as "test" for a second,
+  // separate install (see CONTRIBUTING.md). manage.py writes instance.json. The instance names the
+  // native host and the downloads folder, so nothing connects before it is read.
+  INSTANCE = null;
+const instanceRead = fetch(chrome.runtime.getURL('instance.json'))
+  .then(r => r.json())
+  .then(j => {
+    if (typeof j.instance !== 'string' || !/^([a-z][a-z0-9]{0,15})?$/.test(j.instance))
+      throw Error('instance.json: instance must be "" or a-z and 0-9, up to 16 letters');
+    INSTANCE = j.instance;
+  });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Output that the MCP server turns into a file, plain text or an image. Only extension code makes
 // these objects. Page values (qa_eval, qa_cdp, storage) are plain JSON and can never be one, so a
@@ -397,10 +408,13 @@ function hostAnswer(r) {
   else call.resolve(r.result);
 }
 function connect() {
+  instanceRead.then(connectNow, () => chrome.action.setBadgeText({ text: 'ERR' }));
+}
+function connectNow() {
   if (port) return;
   clearTimeout(retryTimer);
   attempts++;
-  port = chrome.runtime.connectNative(HOST);
+  port = chrome.runtime.connectNative(HOST + (INSTANCE ? '_' + INSTANCE : ''));
   port.onDisconnect.addListener(() => {
     port = null;
     chrome.action.setBadgeText({ text: 'OFF' });
@@ -1501,7 +1515,7 @@ async function dispatch(req) {
   } = req;
   if (method === '__hello') {
     if (policy) QaRules.readPolicy(policy);
-    return { version: VERSION, extensionId: chrome.runtime.id };
+    return { version: VERSION, extensionId: chrome.runtime.id, instance: INSTANCE };
   }
   const state = session(s);
   const quiet =
@@ -1540,6 +1554,7 @@ async function sessionInfo(s, state, env) {
   }
   return {
     version: VERSION,
+    ...(INSTANCE ? { instance: INSTANCE } : {}),
     sessionId: s,
     name: state.name || null,
     sessions: [...sessions.keys()].map(x => (x === s ? 'you' : ownerName(x))),
@@ -1698,7 +1713,7 @@ async function downloadsTool(a, s, env) {
       throw Error('A filename, not a path, is required');
     const downloadId = await chrome.downloads.download({
       url: a.url,
-      filename: 'ChromeBridge/' + s + '/' + a.filename,
+      filename: 'ChromeBridge' + (INSTANCE ? '-' + INSTANCE : '') + '/' + s + '/' + a.filename,
       saveAs: false,
       conflictAction: 'uniquify'
     });

@@ -26,20 +26,56 @@ Put longer guidance in `skill/SKILL.md`.
 ## Test
 
 ```bash
-python3 tests/run.py              # unit tests: Python and Node, no Chrome
-python3 manage.py install         # install what you built
-python3 tests/run.py --live       # live tests against the installed bridge
+python3 tests/run.py                    # unit tests: Python and Node, no Chrome
+python3 tests/run.py --live             # live tests on the test instance (installs it first)
+python3 tests/run.py --live --display   # the same with real windows in the background
 ```
 
 - The live tests need real Windows Chrome. They use only local test pages (`tests/live/fixture.py`, port 18475).
 - `test_capabilities.py` covers the page tools, `test_record.py` videos, `test_perf.py` speed and memory on pages
   that are slow or leak on purpose, `test_policy.py` the site policy, `test_lifecycle.py` start, stop, limits,
-  tool groups and old output folders, and `test_sessions.py` four sessions working at the same time.
+  tool groups, old output folders and both MCP styles, and `test_sessions.py` four sessions working at the same time.
 - They run QA Chrome headless, so no window opens. Add `--display` to test with real windows in the background.
   In display mode every test also reads the Windows foreground window before and after each tool call, and all the
-  time in between, and fails if a QA Chrome window comes to the front.
-- Close your agent sessions that use the bridge first: the live tests need QA Chrome closed at the start.
+  time in between. It fails if a QA Chrome window is still in front 1 s after it came there.
+  A shorter moment is allowed and printed: when a page opens a tab or a window, Chrome puts it in front
+  before the extension can give the focus back.
+- To run one file: `cd tests/live && python3 test_capabilities.py`. It uses the test instance too.
 - Add a test only for a behaviour you changed or a bug you fixed.
+
+### The test instance
+
+The live tests never touch your normal install. They start and stop QA Chrome and change its settings,
+so they run on a second, separate install: the **test instance**.
+
+`tests/run.py --live` sets `WINDOWS_CHROME_BRIDGE_INSTANCE=test` and runs `manage.py install` with it.
+With this variable, `manage.py` works on the instance of that name. Every name that two installs could share
+is different:
+
+| What | Normal install | Test instance |
+|---|---|---|
+| Install folder, with the profile and the output files | `%LOCALAPPDATA%\windows-chrome-bridge` | `%LOCALAPPDATA%\windows-chrome-bridge-test` |
+| Native host (and its registry key in `HKCU\Software\Google\Chrome\NativeMessagingHosts`) | `io.github.darkov19.windows_chrome_bridge` | `io.github.darkov19.windows_chrome_bridge_test` |
+| Named pipes and the start mutex | `WindowsChromeBridge-...` | `WindowsChromeBridge-test-...` |
+| Machine policy | `C:\ProgramData\windows-chrome-bridge\policy.json` | `C:\ProgramData\windows-chrome-bridge-test\policy.json` |
+| `qa_downloads` start | `Downloads\ChromeBridge\` | `Downloads\ChromeBridge-test\` |
+
+How it works:
+
+- `install` writes the name into `extension\instance.json` of the installed release.
+  `qa-bridge.exe` and the extension both read it there. The extension finds its native host by this name.
+- The exe refuses to run in the folder of another instance. The native host checks that the extension
+  belongs to its instance.
+- The live tests set the variable to `test` and stop if it is set to an empty value (the normal install).
+- An instance never changes agent configs. `install` prints the command. To try the instance with an agent,
+  put that command in a temporary MCP config, not in your normal one.
+- A new instance is headless by default.
+- Your normal QA Chrome and the agent sessions that use it can keep running during the tests.
+- Other names work too: a-z and 0-9, up to 16 letters, for example `WINDOWS_CHROME_BRIDGE_INSTANCE=dev2`.
+- To remove the test instance: `WINDOWS_CHROME_BRIDGE_INSTANCE=test python3 manage.py uninstall`.
+
+An exe that was not installed (in `build/` or in an unzipped release) refuses to start or reach QA Chrome.
+It would use the names of the normal install.
 
 ## Style
 
