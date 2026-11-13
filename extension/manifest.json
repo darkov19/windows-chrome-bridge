@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Windows Chrome Bridge",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Lets an AI agent in WSL control this Chrome profile through Windows Chrome Bridge.",
   "permissions": [
     "debugger",

@@ -83,6 +83,15 @@ JPEG by default (`quality` 80); `format:"png"` for exact pixels. Sizes are in de
 - `qa_network(tabId)`: one line per request: `r12 POST 200 fetch 251 B 5 ms /api/send`. Filters: `filter` (text in the URL), `type` (document, fetch, xhr, script, stylesheet, image...), `failed:true` (errors and status 400+). The list keeps the last 3 pages, with a `-- page N --` line between them.
 - `qa_network(tabId, request:"r12")`: headers, request body and response body. Values of Authorization, Cookie, Set-Cookie and token-like headers, and password or token fields in JSON and form bodies, are hidden. URLs show secret parameters as `(hidden)`, for example `?token=(hidden)&page=2`; page reads and tab lists do too. `showSecrets:true` on `qa_network` shows them; use it only when the task needs them. A big or binary body needs `file`. Chrome keeps bodies only for a while.
 - `qa_eval` runs any JavaScript in the page; promises are awaited; output is limited (`maxOutputBytes`, up to 10 MB with `file`).
+- The final check of a page in one call: a page read, a screenshot, console errors and failed requests.
+  ```
+  qa_batch(tabId, steps:[
+    {tool:"qa_snapshot", args:{full:true}},
+    {tool:"qa_screenshot", args:{file:"final.jpg"}},
+    {tool:"qa_console", args:{level:"error"}},
+    {tool:"qa_network", args:{failed:true}}])
+  ```
+  Each step's result has its `text` (the read, the errors, the requests). The screenshot is saved to a file, because a batch returns no image: read `saved.path` to see it.
 
 ## Sessions, tabs and other agents
 

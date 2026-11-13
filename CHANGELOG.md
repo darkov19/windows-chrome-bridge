@@ -6,6 +6,34 @@ Before 1.0.0, a minor version (0.x.0) may change tools or settings in ways that 
 
 Versions 0.1.0 to 0.4.2 were private builds for one machine.
 
+## 0.6.0 - 2026-11-14
+
+### Added
+
+- MCP 2026-07-28: a client can use the bridge without the `initialize` handshake. Each request names its
+  protocol version and client capabilities in `_meta`. `server/discover` returns the supported versions,
+  the capabilities and the instructions. Every result has `resultType` and the server name in `_meta`;
+  `tools/list` and `server/discover` have `ttlMs` and `cacheScope`. An unknown version gets error `-32022`
+  with the supported versions. Clients that use the handshake (MCP 2024-11-05 to 2025-11-25) work as before.
+- Instances for development and tests: with `WINDOWS_CHROME_BRIDGE_INSTANCE=test`, `manage.py` installs and
+  manages a second install that shares nothing with the normal one: its own folder, QA Chrome profile,
+  native host, pipes and policy path. It never changes agent configs. The live tests always use it
+  (`tests/run.py --live` installs it first) and refuse to run on the normal install. See CONTRIBUTING.md.
+- `skill/SKILL.md`: how to get a page read, a screenshot, console errors and failed requests in one `qa_batch` call.
+
+### Changed
+
+- The focus goes back to your program also when a page opens a tab or a popup window between tool calls.
+  Before, this worked only during a tool call and 1.5 s after it, so a popup that a page opened later stayed in front.
+  `window.open` is not changed. A visible session, and a person who works in QA Chrome, keep the focus.
+- A `qa-bridge.exe` that was not installed (in `build/` or an unzipped release) refuses to start or reach QA Chrome,
+  because it would use the names of the normal install. `--version` still works.
+
+### Fixed
+
+- The display-mode live test `qa_chrome_never_in_front` failed now and then at the moment a test page opened a popup.
+  It now fails only if QA Chrome is still in front 1 s later, and it prints the short moments.
+
 ## 0.5.0 - 2026-11-14
 
 The first public version.

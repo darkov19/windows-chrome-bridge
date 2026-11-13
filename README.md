@@ -41,8 +41,8 @@ Without git, download `windows-chrome-bridge-<version>.zip` from the
 [releases page](https://github.com/darkov19/windows-chrome-bridge/releases). It holds a prebuilt `qa-bridge.exe`.
 
 ```bash
-python3 -m zipfile -e windows-chrome-bridge-0.5.0.zip .
-cd windows-chrome-bridge-0.5.0
+python3 -m zipfile -e windows-chrome-bridge-0.6.0.zip .
+cd windows-chrome-bridge-0.6.0
 python3 manage.py install
 ```
 
@@ -109,6 +109,10 @@ One program, `qa-bridge.exe`, has three jobs:
 
 The Chrome extension does the browser work with `chrome.debugger` (the Chrome DevTools Protocol, CDP),
 `chrome.tabs` and `chrome.downloads`.
+
+The MCP server speaks MCP 2024-11-05 to 2025-11-25, which start with the `initialize` handshake,
+and MCP 2026-07-28, which has no handshake: each request names its version in `_meta`, and `server/discover`
+tells a client what the server supports. It has tools only: no resources, prompts or logging.
 
 Startup, step by step:
 
@@ -316,8 +320,11 @@ Notes:
 
 - On Windows, Chrome takes the focus when it maximizes a window. So without visible mode,
   "maximized" means "resize to fill the screen" and "fullscreen" means "resize to fill the whole screen".
-- A page can still open a popup, and Chrome may bring it to the front.
-  While a tool call runs, the extension gives the focus back at once.
+- A page can open a tab or a popup window at any time, and Chrome may bring its window to the front.
+  The extension then gives the focus back at once, unless a session is in visible mode.
+  Chrome shows the window in front for a moment (some milliseconds) before the extension can react.
+  If you work in QA Chrome yourself, you keep the focus: a click on a QA window, or a tab or window
+  you open there, is left alone.
 - Screen numbers can change when you plug monitors in again. `primary` and `secondary` do not.
 
 ## Security
@@ -355,9 +362,11 @@ Developers also need Node.js 18 or newer, for the extension unit tests. See [CON
 ```bash
 python3 build.py                  # build build/<version>/
 python3 tests/run.py              # unit tests, no Chrome needed
-python3 manage.py install         # install what you built
 python3 tests/run.py --live       # live tests: real Chrome, headless, local test page only
 ```
+
+The live tests install the repository as a separate "test" instance and run only there.
+Your normal install and its QA Chrome profile are never touched. See CONTRIBUTING.md.
 
 ## Repository layout
 

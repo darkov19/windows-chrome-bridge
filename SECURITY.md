@@ -27,6 +27,9 @@ Claude Code asks before MCP tool calls unless you allowed them.
 - **The pipe is for your Windows user only.** Its access list allows only your user, and remote clients are refused.
 - **Parent-process check.** The native host runs only when its parent is Chrome with exactly the QA profile.
   Chrome itself allows only this extension id to start the native host.
+- **One install, one set of names.** A second install for development and tests (an instance, see CONTRIBUTING.md)
+  has its own folder, profile, native host, pipes and policy path. The native host refuses an extension of
+  another instance, and an exe that was not installed refuses to start or reach QA Chrome.
 - **Session claims.** One agent session acts only on tabs it opened or claimed. When it disconnects, those tabs close
   (a tab marked "keep open" stays open and becomes unclaimed).
   Sessions share cookies and logins, because they share the profile. A session name is only a label, not a login.
@@ -106,6 +109,7 @@ Details:
   An invalid file makes every call fail with the reason.
 - `qa_session` shows the policy, and `python3 manage.py doctor` says whether one is active.
 - The file is read from `C:\ProgramData\windows-chrome-bridge\policy.json` first, then from the install folder.
+  A test instance reads `C:\ProgramData\windows-chrome-bridge-<instance>\policy.json` instead.
 
 The copy in the install folder can be changed by any program that runs as your Windows user, and that includes your agent.
 For a policy the agent cannot change, an administrator creates `C:\ProgramData\windows-chrome-bridge\policy.json`
