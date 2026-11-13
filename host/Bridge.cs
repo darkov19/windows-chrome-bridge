@@ -661,9 +661,15 @@ class Bridge {
     // A JSON-RPC error with its code. Other exceptions in a request are internal errors.
     class RpcError : Exception {
         public readonly int Code;
+        public readonly object Data;
 
         public RpcError(int code, string message) : base(message) {
             Code = code;
+        }
+
+        public RpcError(int code, string message, object data) : base(message) {
+            Code = code;
+            Data = data;
         }
     }
 
@@ -837,9 +843,13 @@ class Bridge {
         return Obj("isError", true, "content", new[] { Obj("type", "text", "text", message) });
     }
 
-    // MCP versions this server speaks, newest first. All of them use the initialize handshake, and
+    // MCP versions this server speaks, newest first. The legacy ones use the initialize handshake, and
     // the server uses no feature that one of them lacks.
     static readonly string[] Protocols = { "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05" };
+    // The modern version: no handshake. Each request names its version in _meta (MCP 2026-07-28,
+    // "Versioning and Compatibility"). A request without it is served as before, after initialize.
+    const string Modern = "2026-07-28";
+    const string MetaVersion = "io.modelcontextprotocol/protocolVersion";
 
     // MCP lifecycle, version negotiation: "If the server supports the requested protocol version, it
     // MUST respond with the same version. Otherwise, the server MUST respond with another protocol
@@ -848,6 +858,50 @@ class Bridge {
         var p = request.ContainsKey("params") ? request["params"] as Dictionary<string, object> : null;
         string asked = p == null ? null : Str(p, "protocolVersion");
         return Array.IndexOf(Protocols, asked) >= 0 ? asked : Protocols[0];
+    }
+
+    // A tool list never changes while this process runs (toolGroups is read at start). Clients may keep
+    // tools/list and server/discover results this long. "private": they depend on this machine's settings.
+    const int CacheMs = 300000;
+
+    static Dictionary<string, object> ServerInfo() {
+        return Obj("name", "windows-chrome-bridge", "version", Config.Version);
+    }
+
+    // One request of a modern client (MCP 2026-07-28): no session, the version and the client
+    // capabilities come with each request. Every result has resultType and names the server.
+    static Dictionary<string, object> ModernRequest(string method, Dictionary<string, object> p,
+        Dictionary<string, object> meta) {
+        string version = meta == null ? null : Str(meta, MetaVersion);
+        var supported = new List<string> { Modern };
+        supported.AddRange(Protocols);
+        if (version == null) throw new RpcError(-32602, "Invalid params: _meta needs " + MetaVersion + " (a string)");
+        if (version != Modern)
+            throw new RpcError(-32022, "Unsupported protocol version", Obj("supported", supported, "requested", version));
+        object capabilities;
+        if (!meta.TryGetValue("io.modelcontextprotocol/clientCapabilities", out capabilities) ||
+            !(capabilities is Dictionary<string, object>))
+            throw new RpcError(-32602, "Invalid params: _meta needs io.modelcontextprotocol/clientCapabilities (an object)");
+        Dictionary<string, object> result;
+        if (method == "server/discover")
+            result = Obj("supportedVersions", supported, "capabilities", Obj("tools", Obj()), "instructions", Instructions,
+                "ttlMs", CacheMs, "cacheScope", "private");
+        else if (method == "tools/list")
+            result = Obj("tools", Tools(), "ttlMs", CacheMs, "cacheScope", "private");
+        else if (method == "tools/call")
+            result = ToolCall(p);
+        else
+            throw new RpcError(-32601, "Unknown MCP method: " + method);
+        result["resultType"] = "complete";
+        result["_meta"] = Obj("io.modelcontextprotocol/serverInfo", ServerInfo());
+        return result;
+    }
+
+    static Dictionary<string, object> ToolCall(Dictionary<string, object> p) {
+        string name = p == null ? null : Str(p, "name");
+        if (name == null || !Catalog.ContainsKey(name)) throw new RpcError(-32602, "Unknown tool: " + name);
+        var a = p.ContainsKey("arguments") ? p["arguments"] as Dictionary<string, object> : Obj();
+        return CallTool(name, a);
     }
 
     static void Mcp() {
@@ -866,30 +920,34 @@ class Bridge {
                     if (!q.TryGetValue("id", out id)) continue;
                     reply = true;
                     string method = Str(q, "method");
+                    var p = q.ContainsKey("params") ? q["params"] as Dictionary<string, object> : null;
+                    var meta = p != null && p.ContainsKey("_meta") ? p["_meta"] as Dictionary<string, object> : null;
                     object result;
-                    if (method == "initialize")
+                    // A dual-era server: _meta with a protocol version (or server/discover, which only
+                    // modern clients send) is a modern request. Anything else is served as in 2025-11-25.
+                    if (method == "server/discover" || (meta != null && meta.ContainsKey(MetaVersion)))
+                        result = ModernRequest(method, p, meta);
+                    else if (method == "initialize")
                         result = Obj(
                             "protocolVersion", ProtocolVersion(q),
                             "capabilities", Obj("tools", Obj()),
-                            "serverInfo", Obj("name", "windows-chrome-bridge", "version", Config.Version),
+                            "serverInfo", ServerInfo(),
                             "instructions", Instructions);
                     else if (method == "ping")
                         result = Obj();
                     else if (method == "tools/list")
                         result = Obj("tools", Tools());
-                    else if (method == "tools/call") {
-                        var p = q.ContainsKey("params") ? q["params"] as Dictionary<string, object> : null;
-                        string name = p == null ? null : Str(p, "name");
-                        if (name == null || !Catalog.ContainsKey(name)) throw new RpcError(-32602, "Unknown tool: " + name);
-                        var a = p.ContainsKey("arguments") ? p["arguments"] as Dictionary<string, object> : Obj();
-                        result = CallTool(name, a);
-                    } else
+                    else if (method == "tools/call")
+                        result = ToolCall(p);
+                    else
                         throw new RpcError(-32601, "Unknown MCP method: " + method);
                     Console.WriteLine(Json(Obj("jsonrpc", "2.0", "id", id, "result", result)));
                 } catch (Exception e) {
-                    if (reply)
-                        Console.WriteLine(Json(Obj("jsonrpc", "2.0", "id", id, "error",
-                            Obj("code", e is RpcError ? ((RpcError)e).Code : -32603, "message", e.Message))));
+                    if (reply) {
+                        var error = Obj("code", e is RpcError ? ((RpcError)e).Code : -32603, "message", e.Message);
+                        if (e is RpcError && ((RpcError)e).Data != null) error["data"] = ((RpcError)e).Data;
+                        Console.WriteLine(Json(Obj("jsonrpc", "2.0", "id", id, "error", error)));
+                    }
                 }
             }
         } finally {

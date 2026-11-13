@@ -221,7 +221,11 @@ def mcp_args():
 
 
 class Client:
-    def __init__(self, exe, args=None):
+    """meta: the _meta of every request. With it the client speaks MCP 2026-07-28 (no initialize)."""
+
+    def __init__(self, exe, args=None, meta=None):
+        self.meta = meta
+        self.error = None
         self.p = subprocess.Popen(
             [str(exe)] + (mcp_args() if args is None else args),
             stdin=subprocess.PIPE,
@@ -243,7 +247,10 @@ class Client:
 
     def request(self, method, params=None, timeout=90):
         self.seq += 1
-        self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.seq, "method": method, "params": params or {}}) + "\n")
+        params = dict(params or {})
+        if self.meta:
+            params.setdefault("_meta", self.meta)
+        self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.seq, "method": method, "params": params}) + "\n")
         self.p.stdin.flush()
         try:
             reply = self.lines.get(timeout=timeout)
@@ -253,6 +260,7 @@ class Client:
             raise RuntimeError("qa-bridge.exe --mcp ended")
         need(reply.get("id") == self.seq, "MCP reply id mismatch")
         if "error" in reply:
+            self.error = reply["error"]
             raise RuntimeError(reply["error"]["message"])
         return reply["result"]
 

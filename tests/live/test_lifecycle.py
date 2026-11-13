@@ -39,6 +39,9 @@ with test_mode(maxSessions=3, maxTabsPerSession=2, keepOutputDays=3):
             answers = [c.request("initialize", {"protocolVersion": v, "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})
                        ["protocolVersion"] for v in ("2025-06-18", "2024-11-05", "2099-01-01", "2025-11-25")]
             ok("protocol_version_negotiated", answers == ["2025-06-18", "2024-11-05", "2025-11-25", "2025-11-25"])
+            # An old client gets exactly what it got before 2026-07-28 support: no resultType, no cache fields.
+            tools = c.request("tools/list")
+            ok("legacy_results_unchanged", set(tools) == {"tools"} and c.request("ping") == {})
         # Cold start: the first tool call starts QA Chrome. When the client leaves, Chrome stops.
         with Client(EXE) as c:
             c.initialize()
@@ -50,6 +53,30 @@ with test_mode(maxSessions=3, maxTabsPerSession=2, keepOutputDays=3):
             (folder / "page.txt").unlink()
             folder.rmdir()
         ok("cold_chrome_stopped", eventually(closed_down, seconds=40))
+
+        # MCP 2026-07-28: no initialize. Each request names its version and client capabilities in _meta.
+        modern = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},
+                  "io.modelcontextprotocol/clientInfo": {"name": "t", "version": "1"}}
+        catalog = [x["name"] for x in json.loads((EXE.parent / "catalog.json").read_text(encoding="utf-8"))["tools"]]
+        with Client(EXE, meta=modern) as c:
+            d = c.request("server/discover")
+            ok("modern_discover", d["resultType"] == "complete" and d["supportedVersions"][:2] == ["2026-07-28", "2025-11-25"]
+               and d["capabilities"] == {"tools": {}} and d["ttlMs"] > 0 and d["cacheScope"] == "private" and d["instructions"]
+               and d["_meta"]["io.modelcontextprotocol/serverInfo"] == {"name": "windows-chrome-bridge", "version": VERSION})
+            first, again = c.request("tools/list"), c.request("tools/list")
+            ok("modern_tools_list", first["resultType"] == "complete" and first["ttlMs"] > 0 and first["cacheScope"] == "private"
+               and [x["name"] for x in first["tools"]] == catalog and first == again)
+            r = c.call("qa_session")
+            ok("modern_tool_call", r["resultType"] == "complete" and json.loads(r["content"][0]["text"])["version"] == VERSION
+               and r["_meta"]["io.modelcontextprotocol/serverInfo"]["version"] == VERSION)
+            refused(lambda: c.request("tools/list", {"_meta": dict(modern, **{"io.modelcontextprotocol/protocolVersion": "2099-01-01"})}))
+            ok("modern_unsupported_version", c.error["code"] == -32022
+               and c.error["data"] == {"supported": d["supportedVersions"], "requested": "2099-01-01"})
+            refused(lambda: c.request("tools/list", {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28"}}))
+            ok("modern_needs_capabilities", c.error["code"] == -32602)
+            refused(lambda: c.request("ping"))
+            ok("modern_has_no_ping", c.error["code"] == -32601)
+        ok("modern_chrome_stopped", eventually(closed_down, seconds=40))
 
         # Two agents start at the same moment while QA Chrome is closed: one Chrome starts, both work.
         pair = [Client(EXE), Client(EXE)]
