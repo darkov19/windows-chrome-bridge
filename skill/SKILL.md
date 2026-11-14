@@ -75,7 +75,7 @@ The file is MP4 (H.264): it plays on Windows with no extra software, and GitHub 
 
 ## Screenshots
 
-JPEG by default (`quality` 80); `format:"png"` for exact pixels. Sizes are in device pixels (on a 150% screen, 1.5 times the CSS size). A background tab works too. `maxSize` limits width and height in pixels, for example `maxSize:800` for a small image. An image in the result is at most 2000 px by default; then the result has `scaledFrom` and a note. A screenshot saved with `file` keeps the full size. `fullPage:true` or an element (`ref`/`selector`). In `qa_batch`, a screenshot needs `file`.
+JPEG by default (`quality` 80); `format:"png"` for exact pixels. Sizes are in device pixels (on a 150% screen, 1.5 times the CSS size). A background tab works too. `maxSize` limits width and height in pixels, for example `maxSize:800` for a small image. An image in the result is at most 2000 px by default; then the result has `scaledFrom` and a note. A very tall `fullPage` image in the result shows only the top part, at half size (`pageHeight` gives the full height); use `file` for the whole page. A screenshot saved with `file` keeps the full size. `fullPage:true` or an element (`ref`/`selector`). In `qa_batch`, a screenshot needs `file`.
 
 ## Debugging: console and network
 

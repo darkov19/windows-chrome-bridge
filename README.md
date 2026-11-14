@@ -41,8 +41,8 @@ Without git, download `windows-chrome-bridge-<version>.zip` from the
 [releases page](https://github.com/darkov19/windows-chrome-bridge/releases). It holds a prebuilt `qa-bridge.exe`.
 
 ```bash
-python3 -m zipfile -e windows-chrome-bridge-0.6.0.zip .
-cd windows-chrome-bridge-0.6.0
+python3 -m zipfile -e windows-chrome-bridge-0.6.1.zip .
+cd windows-chrome-bridge-0.6.1
 python3 manage.py install
 ```
 
@@ -66,13 +66,17 @@ A Windows program cannot see your WSL, so `--wsl-distro` (the distro the agent r
 python3 manage.py doctor      # check everything and say how to fix a problem
 python3 manage.py stop        # stop QA Chrome, if no agent session uses it
 python3 manage.py install     # run it from a newer version to upgrade
-python3 manage.py rollback    # go back to the version before
+python3 manage.py rollback    # go back to the version before (see below for 0.5.0)
 python3 manage.py uninstall   # remove everything install added
 ```
 
 `uninstall` also removes the QA Chrome profile (its logins and cookies). Add `--keep-profile` to keep it.
 A profile that the `profile` setting puts outside the install folder is never removed; `uninstall` says where it is.
 A copy of `manage.py` is in the install folder, so you can run these after you delete the clone.
+
+A rollback to 0.5.0 also clears the service worker cache of QA Chrome (`profile\Default\Service Worker`),
+because 0.5.0 would otherwise run the cached extension script of the newer version. Logins and cookies stay.
+Websites in QA Chrome register their service workers again; their offline caches are gone.
 
 ## How it works
 
@@ -226,6 +230,8 @@ When QA Chrome starts, it removes session folders that did not change for 7 days
 Screenshots are JPEG by default. `maxSize` limits the width and height in pixels.
 An image that goes to the agent is at most 2000 px wide and high unless `maxSize` says otherwise, because models refuse
 or shrink bigger images. The result then says the size before (`scaledFrom`). A screenshot saved with `file` keeps its full size.
+A full page that is too tall to fit at half size shows only its top part in the result, at half size,
+and the result says the full height (`pageHeight`). `maxSize` fits the whole page; `file` saves the whole page.
 A tab that is not the active tab of its window can be captured too. If Chrome does not paint it within 5 s,
 the bridge shows it in its window for the capture, then shows the tab that was there before. The focus does not change.
 
@@ -264,6 +270,7 @@ Notes:
 
 - `qa_console` lists console messages and page errors, with source and stack, from the last 3 pages of a tab.
   Filter by level and text; page with `offset` and `limit`. When nothing matches, it gives the count of each level.
+  When a message has several lines, every line after the first starts with `    | `.
 - `qa_network` lists requests (method, status, type, size, time, URL) from the last 3 pages, with filters and paging.
   With `request: "r12"` it shows one request with headers and bodies.
   Authorization, cookie and token values, also tokens in URLs (`?token=(hidden)`), are hidden unless the agent asks

@@ -6,6 +6,34 @@ Before 1.0.0, a minor version (0.x.0) may change tools or settings in ways that 
 
 Versions 0.1.0 to 0.4.2 were private builds for one machine.
 
+## 0.6.1 - 2026-11-14
+
+### Changed
+
+- `manage.py rollback` to a version before 0.6.0 (0.5.0) first clears the service worker cache of QA Chrome
+  (`profile\Default\Service Worker`), so that version runs its own extension script. Logins and cookies stay.
+  Websites in QA Chrome register their service workers again; their offline caches are gone.
+- A `fullPage` screenshot in the result is never scaled below half size. A page too tall for that shows its top part,
+  and the result gives `pageHeight` and a note. Before, a tall page became a strip a few pixels wide.
+  `maxSize` still fits the whole page, and `file` still saves it at full size.
+- On a page with more than 200 form fields, a page read asks Chrome for the element of each empty field only once
+  until the page changes. Reads after actions on such pages are faster. A field with a value is still checked at
+  every read, so a password value is never shown.
+
+### Fixed
+
+- An agent whose first call came just when the native host stopped an idle QA Chrome lost its connection.
+  `manage.py stop` (and install, rollback and uninstall) during an agent's start could kill that start.
+  Both stops now take the start lock and count the sessions again just before they stop Chrome.
+- `qa_console`: a message with line breaks could look like other messages, stack lines or page lines.
+  Every line after the first now starts with `    | `.
+- Page reads: a link or button named like `x [e99]` made a change say `(in e99)`, and a backslash in a name
+  was not escaped, so a name ending in `\` looked like it went on.
+- `manage.py uninstall` stopped with a Python traceback when the install folder held a junction or a link, after the
+  agent configs and the native host registration were already removed. It now removes the link itself, never what it
+  points to, and a file it cannot remove gives a clean error.
+- `manage.py rollback` showed a Python traceback when the self-check after the rollback failed. It now gives a clean error.
+
 ## 0.6.0 - 2026-11-14
 
 ### Added
