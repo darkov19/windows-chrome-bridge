@@ -665,11 +665,50 @@ def rollback(args):
     exe = exe_of(base, new_state["current"])
     need(exe.exists(), "Version " + new_state["current"] + " is no longer in " + win(base / "versions"))
     need_chrome_closed(base, state)
+    if version_tuple(new_state["current"]) < (0, 6, 0):
+        clear_worker_cache(base, new_state["current"])
     register(base, new_state["current"])
     save(base / "state.json", new_state)
     point_agents(new_state, str(exe))
-    report_health(self_check(exe))
+    try:
+        report_health(self_check(exe))
+    except Exception as e:
+        raise Problem("Rolled back to " + new_state["current"] + ", but the self-check failed: " + str(e) +
+                      "\nRun: python3 manage.py doctor")
     print("Rolled back to " + new_state["current"] + ". Restart your agent sessions.")
+
+
+def version_tuple(version):
+    return tuple(int(x) for x in re.findall(r"\d+", version)[:3])
+
+
+def clear_worker_cache(base, version):
+    """Versions before 0.6.0 do not reload the extension at start, so QA Chrome would keep running the cached
+    extension script of the newer version. Without the profile's service worker folder, Chrome loads the
+    extension's own script again. Logins and cookies are kept; websites register their service workers again
+    (their offline caches are gone). QA Chrome is closed here (need_chrome_closed)."""
+    folder = profile_of(base) / "Default" / "Service Worker"
+    if not folder.exists():
+        return
+    aside = folder.with_name("Service Worker.rollback")
+    shutil.rmtree(aside, ignore_errors=True)
+    try:
+        # A rename fails as a whole while Chrome uses the folder, so nothing is half deleted.
+        folder.rename(aside)
+    except OSError as e:
+        raise Problem("Could not clear the service worker cache of QA Chrome (" + (e.strerror or str(e)) + "). "
+                      "Close QA Chrome (python3 manage.py stop), then run rollback again. Nothing was changed")
+    shutil.rmtree(aside, ignore_errors=True)
+    print("Cleared the service worker cache of QA Chrome, so " + version + " runs its own extension script. "
+          "Logins and cookies are kept.")
+
+
+def profile_of(base):
+    """The QA Chrome profile folder (WSL path): the profile setting, or profile in the install folder."""
+    settings = settings_of(base) if base.exists() else {}
+    if settings.get("profile"):
+        return Path(subprocess.check_output(["wslpath", "-u", settings["profile"]], text=True).strip())
+    return base / "profile"
 
 
 def profile_plan(base, profile, keep):
@@ -715,9 +754,7 @@ def uninstall(args):
     base = root()
     state = read_state(base)
     need_chrome_closed(base, state)
-    settings = settings_of(base) if base.exists() else {}
-    profile = (Path(subprocess.check_output(["wslpath", "-u", settings["profile"]], text=True).strip())
-               if settings.get("profile") else base / "profile")
+    profile = profile_of(base)
     keep, what = profile_plan(base, profile, args.keep_profile)
     existed = base.exists()
     for agent, path in state["agents"].items():
