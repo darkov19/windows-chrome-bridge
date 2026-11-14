@@ -41,8 +41,8 @@ Without git, download `windows-chrome-bridge-<version>.zip` from the
 [releases page](https://github.com/darkov19/windows-chrome-bridge/releases). It holds a prebuilt `qa-bridge.exe`.
 
 ```bash
-python3 -m zipfile -e windows-chrome-bridge-0.6.1.zip .
-cd windows-chrome-bridge-0.6.1
+python3 -m zipfile -e windows-chrome-bridge-0.6.2.zip .
+cd windows-chrome-bridge-0.6.2
 python3 manage.py install
 ```
 

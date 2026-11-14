@@ -91,6 +91,19 @@ with test_mode(maxSessions=3, maxTabsPerSession=2, keepOutputDays=3):
             ok("stop_waits_for_a_start", answers == [VERSION] and r["running"] and r["sessions"] == 1)
         ok("started_chrome_stopped", eventually(closed_down, seconds=40))
 
+        # After an upgrade or a rollback, an agent session that is still open runs the release before.
+        # Its tool call says so and does not start QA Chrome.
+        state = (ROOT / "state.json").read_text(encoding="utf-8")
+        (ROOT / "state.json").write_text(json.dumps(dict(json.loads(state), current="9.9.9")), encoding="utf-8")
+        try:
+            with Client(EXE) as c:
+                c.initialize()
+                msg = refused(lambda: c.result("qa_session"))
+                ok("old_session_says_restart", "runs Windows Chrome Bridge " + VERSION + ", but 9.9.9 is installed now. Restart" in msg
+                   and chrome_closed())
+        finally:
+            (ROOT / "state.json").write_text(state, encoding="utf-8")
+
         # Two agents start at the same moment while QA Chrome is closed: one Chrome starts, both work.
         pair = [Client(EXE), Client(EXE)]
         clients.extend(pair)

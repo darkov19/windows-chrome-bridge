@@ -6,6 +6,15 @@ Before 1.0.0, a minor version (0.x.0) may change tools or settings in ways that 
 
 Versions 0.1.0 to 0.4.2 were private builds for one machine.
 
+## 0.6.2 - 2026-11-14
+
+### Changed
+
+- After an upgrade or a rollback, an agent session that is still open says "This agent session runs Windows Chrome
+  Bridge 0.6.2, but 0.6.3 is installed now. Restart this agent session to use the browser". Before, its next tool
+  call started QA Chrome with the extension of its own release. The handshake then failed, and that QA Chrome was in
+  the way of the sessions of the installed release. Sessions of 0.6.1 and older still do this after an upgrade.
+
 ## 0.6.1 - 2026-11-14
 
 ### Changed

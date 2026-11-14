@@ -80,6 +80,23 @@ static class Config {
         }
     }
 
+    // The version that manage.py installed or rolled back to last (state.json), or null when this exe is
+    // not installed or the file cannot be read.
+    public static string CurrentVersion {
+        get {
+            if (!Installed) return null;
+            try {
+                var state = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(
+                    File.ReadAllText(RootFile("state.json")));
+                object v = null;
+                if (state != null) state.TryGetValue("current", out v);
+                return v as string;
+            } catch (Exception) {
+                return null;
+            }
+        }
+    }
+
     public static string RootFile(string name) {
         return Path.Combine(Root, name);
     }

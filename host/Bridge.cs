@@ -695,6 +695,13 @@ class Bridge {
     static string refusal;
 
     static void Connect() {
+        // An agent session keeps its qa-bridge.exe after an upgrade or a rollback. It must not start QA
+        // Chrome with the extension of its own release: Chrome starts the native host of the installed
+        // release, which refuses that extension, and this Chrome is then in the way of every other session.
+        string current = Config.CurrentVersion, mine = Path.GetFileName(Config.Dir);
+        if (current != null && current != mine)
+            throw new Exception("This agent session runs Windows Chrome Bridge " + mine + ", but " + current +
+                " is installed now. Restart this agent session to use the browser");
         // Under the start lock from the check until the pipe is connected: an idle stop or manage.py stop
         // must not kill this QA Chrome in between (see IdleCheck and StopIdle).
         Lifecycle.Locked<object>(() => {
