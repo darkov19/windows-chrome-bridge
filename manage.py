@@ -688,6 +688,29 @@ def profile_plan(base, profile, keep):
     return set(), "removed"
 
 
+def remove_contents(base, keep):
+    """Delete everything in base except the top-level names in keep (lower case). A junction or link is
+    removed itself; what it points to is not part of the install and is never changed."""
+    left = []
+    for item in base.iterdir():
+        if item.name.casefold() in keep:
+            continue
+        try:
+            if item.is_symlink():
+                target = os.readlink(item)
+                item.unlink()
+                print("Removed the link " + win(item) + ". It pointed to " + target + "; that folder was not changed.")
+            elif item.is_dir():
+                # rmtree removes links inside the folder without following them.
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        except OSError as e:
+            left.append(win(item) + " (" + (e.strerror or str(e)) + ")")
+    need(not left, "Could not remove " + ", ".join(left) + ". The agent configs and the native host registration "
+         "are already removed. Close the programs that use these files, then run uninstall again")
+
+
 def uninstall(args):
     base = root()
     state = read_state(base)
@@ -711,10 +734,7 @@ def uninstall(args):
     elif value:
         print("The native host registration points to another install (" + value + "). Left it")
     if base.exists():
-        for item in base.iterdir():
-            if item.name.casefold() in keep:
-                continue
-            shutil.rmtree(item) if item.is_dir() else item.unlink()
+        remove_contents(base, keep)
         if not keep:
             base.rmdir()
         print("Removed " + win(base) + ": the bridge, its settings and output files" + (", except the profile." if keep else "."))

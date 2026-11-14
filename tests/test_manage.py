@@ -107,6 +107,22 @@ class Uninstall(unittest.TestCase):
                 m.profile_plan(base, unsafe, False)
 
 
+    def test_links_are_removed_not_followed(self):
+        # In WSL a Windows junction is a symbolic link, so a real link is the same case.
+        with tempfile.TemporaryDirectory() as tmp:
+            base, outside = Path(tmp) / "install", Path(tmp) / "elsewhere"
+            (base / "versions" / "0.6.0").mkdir(parents=True)
+            (base / "profile").mkdir()
+            outside.mkdir()
+            (outside / "keep.txt").write_text("not part of the install")
+            (base / "state.json").write_text("{}")
+            (base / "linked").symlink_to(outside, target_is_directory=True)
+            (base / "versions" / "inner").symlink_to(outside, target_is_directory=True)
+            with mock.patch.object(m, "win", str):
+                m.remove_contents(base, {"profile"})
+            self.assertEqual([x.name for x in base.iterdir()], ["profile"])
+            self.assertEqual((outside / "keep.txt").read_text(), "not part of the install")
+
 class Versions(unittest.TestCase):
     def test_upgrade_keeps_the_version_before(self):
         state = {"current": "0.5.0", "previous": "0.4.2", "agents": {}}
