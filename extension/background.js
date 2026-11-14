@@ -8,6 +8,8 @@ const HOST = 'io.github.darkov19.windows_chrome_bridge',
   // maxSize says otherwise. Models refuse or shrink bigger images (Claude: 8000 px, and 2000 px
   // when a request has many images). A screenshot saved to a file keeps its full size.
   INLINE_IMAGE_MAX = 2000,
+  // Pages with more fields than this keep what each field's element said (see frameItems).
+  MANY_FIELDS = 200,
   // Network and console lists keep this many pages (navigations) of each tab.
   PAGES_KEPT = 3,
   MAX_REQUESTS = 1000,
@@ -265,6 +267,8 @@ function newLog() {
     lifeSeq: 0,
     refs: new Map(),
     refFrames: new Map(),
+    // On a page with very many fields: what the element of each field said (see frameItems).
+    fieldInfo: new Map(),
     paused: new Map(),
     mainFrame: null,
     loading: false,
@@ -664,6 +668,7 @@ async function event(src, method, p) {
       l.mainFrame = p.frame.id;
       l.refs.clear();
       l.refFrames.clear();
+      l.fieldInfo.clear();
       l.tree = null;
       newPage(l, p.frame.loaderId, p.frame.url);
       // A page from the back/forward cache shows at once and has no load event.
@@ -1090,6 +1095,8 @@ async function frameItems(id, l, f, frames, level, origin) {
   // without a name cannot be told apart. So look at the element of each text field, and of each other
   // field without a name: mark password fields (and never show their value), and give a nameless
   // field its id, name or placeholder attribute. A text field with a value is always checked.
+  // That is one call per field. On a page with very many fields, every read after an action would make
+  // all of them again, so there the answers for empty fields are kept until the page changes.
   const secret = new Set(),
     fields = new Map();
   const asked = nodes.filter(n => {
@@ -1097,22 +1104,33 @@ async function frameItems(id, l, f, frames, level, origin) {
     if (n.ignored || !n.backendDOMNodeId || !QaTree.FIELD_ROLES.has(role)) return false;
     return role === 'textbox' || role === 'searchbox' || !n.name?.value;
   });
+  const keep = asked.length > MANY_FIELDS;
+  if (l.fieldInfo.size > 20000) l.fieldInfo.clear();
   await Promise.all(
     asked
       .filter((n, i) => i < 1000 || n.value?.value)
-      .map(n =>
-        send('DOM.describeNode', { backendNodeId: n.backendDOMNodeId }).then(
-          d => {
-            const at = {};
-            const list = d.node.attributes || [];
-            for (let i = 0; i < list.length; i += 2) at[list[i].toLowerCase()] = list[i + 1];
-            const password = /^password$/i.test(at.type || '');
-            if (password) secret.add(n.backendDOMNodeId);
-            fields.set(n.backendDOMNodeId, { password, id: at.id, name: at.name, placeholder: at.placeholder });
+      .map(n => {
+        const key = f.id + ' ' + n.backendDOMNodeId;
+        const known = keep && !n.value?.value ? l.fieldInfo.get(key) : undefined;
+        const info = known
+          ? Promise.resolve(known)
+          : send('DOM.describeNode', { backendNodeId: n.backendDOMNodeId }).then(d => {
+              const at = {};
+              const list = d.node.attributes || [];
+              for (let i = 0; i < list.length; i += 2) at[list[i].toLowerCase()] = list[i + 1];
+              const password = /^password$/i.test(at.type || '');
+              const field = { password, id: at.id, name: at.name, placeholder: at.placeholder };
+              if (keep) l.fieldInfo.set(key, field);
+              return field;
+            });
+        return info.then(
+          field => {
+            if (field.password) secret.add(n.backendDOMNodeId);
+            fields.set(n.backendDOMNodeId, field);
           },
           () => n.value?.value && secret.add(n.backendDOMNodeId)
-        )
-      )
+        );
+      })
   );
   const inside = new Map();
   if (level < 3)
