@@ -132,6 +132,19 @@ test('page read: views', () => {
   assert.match(T.view(lines, { maxChars: 60 }).text, /\[Cut at 60 characters: 1 of 8 lines shown/);
 });
 
+test('page read: names cannot fake a ref or an end of the name', () => {
+  // The list keeps its ref (e2) in both reads; the new link inside it is named like a ref.
+  next = 2;
+  const before = read(page(node('RootWebArea', '', { kids: [node('list', 'Items')] })));
+  next = 1;
+  const after = read(page(node('RootWebArea', '', {
+    kids: [node('list', 'Items', { kids: [node('link', 'x [e99]')] }), node('main', 'a\\" b\\')]
+  })));
+  const text = T.diff(before, after).text;
+  assert.match(text, /\+ - link "x \[e99\]" \[e1\]  \(in e2\)/);
+  assert.ok(text.includes('+ - main "a\\\\\\" b\\\\" [e3]'), text);
+});
+
 test('page read: changes since the last read', () => {
   const before = read(form().nodes);
   const after = read(form('Thanks, Ann', [node('alert', 'Saved')]).nodes);

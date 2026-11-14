@@ -55,7 +55,7 @@
   const MAX_OPTIONS = 20;
 
   const norm = s => String(s == null ? '' : s).replace(/\s+/gu, ' ').trim();
-  const quote = s => '"' + s.replace(/"/g, '\\"') + '"';
+  const quote = s => '"' + s.replace(/[\\"]/g, '\\$&') + '"';
   const prop = (n, name) => {
     const p = (n.properties || []).find(x => x.name === name);
     return p && p.value ? p.value.value : undefined;
@@ -361,10 +361,8 @@
     return r;
   }
 
-  function refOrText(l) {
-    const m = /\[((?:f\d+)?e\d+)\]/.exec(l.text);
-    return m ? m[1] : l.text.slice(0, 60);
-  }
+  // A line with a ref has the ref as its key. Its text can hold anything, for example a name "x [e99]".
+  const refOrText = l => (/^(?:f\d+)?e\d+$/.test(l.key) ? l.key : l.text.slice(0, 60));
 
   const QaTree = { build, lines, view, diff, INTERACTIVE, FIELD_ROLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = QaTree;
