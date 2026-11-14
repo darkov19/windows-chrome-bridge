@@ -491,13 +491,18 @@ with test_mode():
         dpr = ev("devicePixelRatio")
         tall_file = call(c, "qa_screenshot", tabId=t, fullPage=True, file="shot-full.jpg")
         ok("full_page_file_not_scaled", "scaledFrom" not in tall_file and abs(jpeg_size(wsl_file(tall_file["saved"]))[1] - round(4560 * dpr)) <= 2)
-        # An image in the result is at most 2000 px, and the result says it was scaled down.
+        # An image in the result is at most 2000 px. A page this tall would be a thin strip, so it shows the top at half size.
         call(c, "qa_navigate", tabId=t, url="http://127.0.0.1:18475/tall", snapshot=False)
         content = shot(c, tabId=t, fullPage=True, format="png")["content"]
         w, h = struct.unpack(">II", base64.b64decode(content[0]["data"])[16:24])
         fields = json.loads(content[1]["text"])
-        ok("tall_full_page_bounded", (w, h) == (fields["width"], fields["height"]) and 1990 <= h <= 2000
-           and int(fields["scaledFrom"].split("x")[1]) >= 40000 * dpr and "maxSize" in fields["note"])
+        part_w, part_h = map(int, fields["scaledFrom"].split("x"))
+        print("tall page", fields, flush=True)
+        ok("tall_full_page_shows_the_top", (w, h) == (fields["width"], fields["height"]) and 1990 <= h <= 2000
+           and abs(part_h - 4000) <= 2 and abs(w - part_w / 2) <= 1 and fields["pageHeight"] >= 40000 * dpr and "file" in fields["note"])
+        whole = json.loads(shot(c, tabId=t, fullPage=True, maxSize=2000)["content"][1]["text"])
+        ok("tall_full_page_max_size_fits_all", whole["height"] <= 2000 and "pageHeight" not in whole
+           and int(whole["scaledFrom"].split("x")[1]) >= 40000 * dpr)
 
         # Page read speed and size with 1500 buttons.
         call(c, "qa_navigate", tabId=t, url="http://127.0.0.1:18475/many", snapshot=False)

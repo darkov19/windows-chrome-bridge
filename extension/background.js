@@ -8,6 +8,8 @@ const HOST = 'io.github.darkov19.windows_chrome_bridge',
   // maxSize says otherwise. Models refuse or shrink bigger images (Claude: 8000 px, and 2000 px
   // when a request has many images). A screenshot saved to a file keeps its full size.
   INLINE_IMAGE_MAX = 2000,
+  // A full-page image in the result is never scaled below this. A taller page shows its top part.
+  MIN_PAGE_SCALE = 0.5,
   // Pages with more fields than this keep what each field's element said (see frameItems).
   MANY_FIELDS = 200,
   // Network and console lists keep this many pages (navigations) of each tab.
@@ -1299,6 +1301,16 @@ async function screenshot(id, a) {
     clip = { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight };
   }
   const ratio = (await evaluate(id, 'devicePixelRatio').catch(() => 1)) || 1;
+  // A whole tall page fitted into the image limit is a thin strip that nobody can read. Without maxSize
+  // and file, show the top of the page at half size or more.
+  let pageHeight;
+  if (a.fullPage && a.maxSize === undefined && a.file === undefined) {
+    const tallest = Math.floor(INLINE_IMAGE_MAX / (MIN_PAGE_SCALE * ratio));
+    if (clip.height > tallest && clip.width <= tallest) {
+      pageHeight = Math.round(clip.height * ratio);
+      clip = { ...clip, height: tallest };
+    }
+  }
   const cap = a.maxSize ?? (a.file === undefined ? INLINE_IMAGE_MAX : undefined);
   const scale = cap ? Math.min(1, cap / (Math.max(clip.width, clip.height) * ratio)) : 1;
   params.clip = { ...clip, scale };
@@ -1318,6 +1330,12 @@ async function screenshot(id, a) {
     size.scaledFrom = Math.round(clip.width * ratio) + 'x' + Math.round(clip.height * ratio);
     if (a.maxSize === undefined)
       size.note = `Scaled down to ${INLINE_IMAGE_MAX} px, the limit for an image in the result. maxSize (up to 10000) or file gives more pixels`;
+  }
+  if (pageHeight) {
+    size.pageHeight = pageHeight;
+    size.note =
+      `The top ${Math.round(clip.height * ratio)} of ${pageHeight} px of the page: the whole page would be too thin to read. ` +
+      'file saves the whole page; maxSize gives the whole page in the result, scaled to fit';
   }
   if (r.data.length > MAX_IMAGE_CHARS)
     throw Error(
