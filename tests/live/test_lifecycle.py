@@ -78,6 +78,19 @@ with test_mode(maxSessions=3, maxTabsPerSession=2, keepOutputDays=3):
             ok("modern_has_no_ping", c.error["code"] == -32601)
         ok("modern_chrome_stopped", eventually(closed_down, seconds=40))
 
+        # manage.py stop while an agent starts QA Chrome: the stop waits for the start, counts the session and keeps Chrome.
+        with Client(EXE) as c:
+            c.initialize()
+            answers = []
+            th = threading.Thread(target=lambda: answers.append(c.result("qa_session")["version"]))
+            th.start()
+            time.sleep(0.5)
+            r = lifecycle("stop-idle")
+            th.join(timeout=120)
+            print("stop during a start:", r, answers, flush=True)
+            ok("stop_waits_for_a_start", answers == [VERSION] and r["running"] and r["sessions"] == 1)
+        ok("started_chrome_stopped", eventually(closed_down, seconds=40))
+
         # Two agents start at the same moment while QA Chrome is closed: one Chrome starts, both work.
         pair = [Client(EXE), Client(EXE)]
         clients.extend(pair)

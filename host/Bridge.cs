@@ -195,13 +195,15 @@ class Bridge {
                 broken.Dispose();
                 continue;
             }
+            // Count the session at once: the idle stop checks the count (see IdleCheck).
+            int count = Interlocked.Increment(ref clientCount);
             var connected = listener;
             listener = NextListener();
             int max = 8;
             try {
                 max = Config.MaxSessions;
             } catch { }
-            if (Interlocked.Increment(ref clientCount) > max) {
+            if (count > max) {
                 Interlocked.Decrement(ref clientCount);
                 Refuse(connected, "Too many QA sessions: " + max + " MCP clients are already connected " +
                     "(maxSessions in bridge-config.json)");
@@ -263,20 +265,29 @@ class Bridge {
         int ticket = Interlocked.Increment(ref idleTicket);
         var t = new Thread(() => {
             Thread.Sleep(delay);
-            if (ticket != Thread.VolatileRead(ref idleTicket) || Thread.VolatileRead(ref clientCount) != 0) return;
+            if (!Idle(ticket)) return;
             try {
                 // A release for a new, empty session closes nothing and says whether the profile is safe to stop.
                 var reply = Forward("__release", Obj(), NewId(), null);
                 var data = reply.ContainsKey("result") ? reply["result"] as Dictionary<string, object> : null;
                 if (data == null || !data.ContainsKey("safeToStopProfile") || !(bool)data["safeToStopProfile"]) return;
-                if (Thread.VolatileRead(ref clientCount) != 0) return;
-                var root = Lifecycle.Snapshot().Find(e => e.root);
-                if (root == null || !Lifecycle.StartedForSessions(root)) return;
-                Lifecycle.Stop(new Lifecycle.Lease { launched = true, root = root }, true);
+                // An MCP server holds the start lock from its check for a running QA Chrome until its pipe is
+                // connected (see Connect), so under the lock no new session can come. One that connected just
+                // before is counted by the time the process lookups are done, so check the count after them.
+                Lifecycle.Locked<object>(() => {
+                    var root = Lifecycle.Snapshot().Find(e => e.root);
+                    if (root == null || !Lifecycle.StartedForSessions(root) || !Idle(ticket)) return null;
+                    Lifecycle.Stop(new Lifecycle.Lease { launched = true, root = root }, true);
+                    return null;
+                });
             } catch { }
         });
         t.IsBackground = true;
         t.Start();
+    }
+
+    static bool Idle(int ticket) {
+        return ticket == Thread.VolatileRead(ref idleTicket) && Thread.VolatileRead(ref clientCount) == 0;
     }
 
     // The extension asks for a garbage collection of one page ({keeper: "gc", targetId, callId}).
@@ -684,28 +695,32 @@ class Bridge {
     static string refusal;
 
     static void Connect() {
-        // Keep the lease of a Chrome this process started, so it is stopped at exit even after a reconnect.
-        var next = Lifecycle.Ensure(true);
-        if (lease == null || next.launched) lease = next;
-        var deadline = DateTime.UtcNow.AddSeconds(45);
-        int delay = 250;
-        string last = "";
-        while (DateTime.UtcNow < deadline) {
-            pipe = new NamedPipeClientStream(".", PipeName(), PipeDirection.InOut, PipeOptions.None,
-                TokenImpersonationLevel.Identification);
-            try {
-                pipe.Connect(500);
-                return;
-            } catch (Exception e) {
-                last = e.Message;
-                pipe.Dispose();
-                pipe = null;
-                Thread.Sleep(delay);
-                delay = Math.Min(delay * 2, 2000);
+        // Under the start lock from the check until the pipe is connected: an idle stop or manage.py stop
+        // must not kill this QA Chrome in between (see IdleCheck and StopIdle).
+        Lifecycle.Locked<object>(() => {
+            // Keep the lease of a Chrome this process started, so it is stopped at exit even after a reconnect.
+            var next = Lifecycle.Ensure(true);
+            if (lease == null || next.launched) lease = next;
+            var deadline = DateTime.UtcNow.AddSeconds(45);
+            int delay = 250;
+            string last = "";
+            while (DateTime.UtcNow < deadline) {
+                pipe = new NamedPipeClientStream(".", PipeName(), PipeDirection.InOut, PipeOptions.None,
+                    TokenImpersonationLevel.Identification);
+                try {
+                    pipe.Connect(500);
+                    return null;
+                } catch (Exception e) {
+                    last = e.Message;
+                    pipe.Dispose();
+                    pipe = null;
+                    Thread.Sleep(delay);
+                    delay = Math.Min(delay * 2, 2000);
+                }
             }
-        }
-        throw new Exception("QA Chrome did not connect within 45 s (" + Lifecycle.Snapshot().Count +
-            " Chrome processes use the QA profile). Run: python3 manage.py doctor. Last pipe error: " + last);
+            throw new Exception("QA Chrome did not connect within 45 s (" + Lifecycle.Snapshot().Count +
+                " Chrome processes use the QA profile). Run: python3 manage.py doctor. Last pipe error: " + last);
+        });
     }
 
     // One tool call. Returns the MCP tool result; a failure is a result with isError=true.
@@ -968,43 +983,46 @@ class Bridge {
     // and uninstall: stop QA Chrome when no agent session is connected. Without the flag, open QA
     // windows (for example kept tabs) also keep it running.
     static object StopIdle(bool evenWithWindows) {
-        var root = Lifecycle.Snapshot().Find(e => e.root);
-        if (root == null) return Obj("running", false, "stopped", false);
-        int others = 0;
-        bool windows = false;
-        using (var p = new NamedPipeClientStream(".", PipeName(), PipeDirection.InOut, PipeOptions.None,
-            TokenImpersonationLevel.Identification)) {
-            bool connected = false;
-            try {
-                p.Connect(3000);
-                connected = true;
-            } catch {
-                // No native host: no agent session can be connected.
-            }
-            if (connected) {
+        // Under the start lock, so an agent that is starting or connecting to QA Chrome is not cut off.
+        return Lifecycle.Locked<object>(() => {
+            var root = Lifecycle.Snapshot().Find(e => e.root);
+            if (root == null) return Obj("running", false, "stopped", false);
+            int others = 0;
+            bool windows = false;
+            using (var p = new NamedPipeClientStream(".", PipeName(), PipeDirection.InOut, PipeOptions.None,
+                TokenImpersonationLevel.Identification)) {
+                bool connected = false;
                 try {
-                    Frame(p, Json(Obj("method", "__release", "args", Obj())));
-                    var r = Parse(ReadFrame(p));
-                    if (r.ContainsKey("error")) {
-                        // A refused connection: the session limit is full, or the native host refuses new
-                        // sessions (a bad handshake or policy.json). Sessions that connected before can still
-                        // be working, so count them. Without a count, do not stop.
-                        others = r.ContainsKey("clients") ? Convert.ToInt32(r["clients"]) - 1 : -1;
-                    } else {
-                        others = r.ContainsKey("clients") ? Convert.ToInt32(r["clients"]) - 1 : -1;
-                        var data = r.ContainsKey("result") ? r["result"] as Dictionary<string, object> : null;
-                        windows = data != null && data.ContainsKey("preservedWindow") && (bool)data["preservedWindow"];
-                    }
+                    p.Connect(3000);
+                    connected = true;
                 } catch {
-                    others = -1;
+                    // No native host: no agent session can be connected.
+                }
+                if (connected) {
+                    try {
+                        Frame(p, Json(Obj("method", "__release", "args", Obj())));
+                        var r = Parse(ReadFrame(p));
+                        if (r.ContainsKey("error")) {
+                            // A refused connection: the session limit is full, or the native host refuses new
+                            // sessions (a bad handshake or policy.json). Sessions that connected before can still
+                            // be working, so count them. Without a count, do not stop.
+                            others = r.ContainsKey("clients") ? Convert.ToInt32(r["clients"]) - 1 : -1;
+                        } else {
+                            others = r.ContainsKey("clients") ? Convert.ToInt32(r["clients"]) - 1 : -1;
+                            var data = r.ContainsKey("result") ? r["result"] as Dictionary<string, object> : null;
+                            windows = data != null && data.ContainsKey("preservedWindow") && (bool)data["preservedWindow"];
+                        }
+                    } catch {
+                        others = -1;
+                    }
                 }
             }
-        }
-        if (others != 0 || (windows && !evenWithWindows))
-            return Obj("running", true, "stopped", false, "sessions", others, "windows", windows);
-        Lifecycle.Stop(new Lifecycle.Lease { launched = true, root = root }, true);
-        bool gone = Lifecycle.Snapshot().Count == 0;
-        return Obj("running", !gone, "stopped", gone, "sessions", 0, "windows", windows);
+            if (others != 0 || (windows && !evenWithWindows))
+                return Obj("running", true, "stopped", false, "sessions", others, "windows", windows);
+            Lifecycle.Stop(new Lifecycle.Lease { launched = true, root = root }, true);
+            bool gone = Lifecycle.Snapshot().Count == 0;
+            return Obj("running", !gone, "stopped", gone, "sessions", 0, "windows", windows);
+        });
     }
 
     // --mcp [--wsl-distro NAME] [--wsl-root /mnt/]. manage.py writes them into the agent's config.

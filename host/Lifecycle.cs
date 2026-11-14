@@ -169,10 +169,25 @@ static class Lifecycle {
     // forSessions: an MCP server starts Chrome for its agent session. It writes a marker into the
     // profile, so whichever MCP server leaves last can stop that Chrome (see StartedForSessions).
     // A QA Chrome started any other way (--lifecycle-start, by hand) is never stopped by a session.
-    // Two agents that start at the same moment must not both launch Chrome on one profile: the second
-    // Chrome hands over to the first and closes its CDP pipe. So the check and the launch run under a
-    // mutex that all processes of this Windows user share.
     public static Lease Ensure(bool forSessions) {
+        return Locked(() => {
+            var existing = Snapshot().Find(e => e.root);
+            if (existing != null) return new Lease { launched = false, root = existing };
+            var root = Launch();
+            try {
+                if (forSessions) File.WriteAllText(MarkerPath, root.pid + " " + root.started);
+                else File.Delete(MarkerPath);
+            } catch { }
+            return new Lease { launched = true, root = root };
+        });
+    }
+
+    // Runs f under the start lock, a mutex that all processes of this Windows user share.
+    // Two agents that start at the same moment must not both launch Chrome on one profile: the second
+    // Chrome hands over to the first and closes its CDP pipe. And a stop must not kill a QA Chrome that
+    // an agent is connecting to: an MCP server holds the lock from its check until its pipe is connected,
+    // and a stop holds it from its last session count until the kill.
+    public static T Locked<T>(Func<T> f) {
         using (var start = new Mutex(false, @"Local\" + Config.NamePrefix + "-start-" +
             System.Security.Principal.WindowsIdentity.GetCurrent().User.Value)) {
             try {
@@ -181,14 +196,7 @@ static class Lifecycle {
                 // The process that held it ended; the mutex is now ours.
             }
             try {
-                var existing = Snapshot().Find(e => e.root);
-                if (existing != null) return new Lease { launched = false, root = existing };
-                var root = Launch();
-                try {
-                    if (forSessions) File.WriteAllText(MarkerPath, root.pid + " " + root.started);
-                    else File.Delete(MarkerPath);
-                } catch { }
-                return new Lease { launched = true, root = root };
+                return f();
             } finally {
                 start.ReleaseMutex();
             }
