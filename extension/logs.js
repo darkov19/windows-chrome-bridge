@@ -158,6 +158,10 @@
     return 'info';
   }
 
+  // A page can print line breaks. Every further line of one message starts with "    | ", so the text
+  // cannot look like another message, a stack line or a page line.
+  const moreLines = s => String(s).replace(/\r\n|[\r\n\u2028\u2029]/g, '\n    | ');
+
   // o: {level, filter, offset, limit, pages}. m: {n, page, level, text, url, line, col, stack}.
   function consoleList(list, o = {}) {
     let rows = list;
@@ -180,8 +184,8 @@
         out.push('-- page ' + nav + (n && n.url ? ': ' + shortUrl(n.url, null) : '') + ' --');
       }
       const where = m.url ? ' (' + shortUrl(m.url, o.origin) + ':' + (m.line + 1) + ':' + (m.col + 1) + ')' : '';
-      out.push('#' + m.n + ' [' + m.level + '] ' + m.text + where);
-      for (const s of m.stack || []) out.push('    at ' + s);
+      out.push('#' + m.n + ' [' + m.level + '] ' + moreLines(m.text) + where);
+      for (const s of m.stack || []) out.push('    at ' + moreLines(s));
     }
     return out.join('\n');
   }

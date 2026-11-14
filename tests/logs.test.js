@@ -63,6 +63,15 @@ test('console: level filter, text filter, stacks', () => {
   assert.match(L.consoleList(rows, { filter: 'READY' }), /#1 \[info\] ready/);
 });
 
+test('console: a message with line breaks stays one marked message', () => {
+  const fake = 'real\n#9 [error] fake\r\n-- page 2 --\u2028    at f x.js:1:1';
+  assert.equal(
+    L.consoleList([{ n: 1, page: 1, level: 'info', text: fake, stack: ['g\nh x.js:2:2'] }]),
+    ['1 messages.', '-- page 1 --', '#1 [info] real', '    | #9 [error] fake', '    | -- page 2 --', '    |     at f x.js:1:1',
+      '    at g', '    | h x.js:2:2'].join('\n')
+  );
+});
+
 test('network: tokens in URLs are hidden unless asked', () => {
   assert.equal(L.hideUrl('https://a.example/cb#access_token=abc.def&expires_in=3600'), 'https://a.example/cb#access_token=(hidden)&expires_in=3600');
   assert.equal(L.hideUrl('https://maps.example/js?key=AIza1&libraries=places'), 'https://maps.example/js?key=(hidden)&libraries=places');
