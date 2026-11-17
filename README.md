@@ -172,8 +172,8 @@ Before 0.5.0 it was 42 tools and about 18,500 characters.
 A new list applies to agent sessions that start after the change.
 Tool groups save context; they are not a security limit. For limits, use `policy.json`.
 
-The full guide for agents is [skill/SKILL.md](skill/SKILL.md).
-For Claude Code, copy it to `~/.claude/skills/native-windows-chrome/SKILL.md`.
+The guide for agents is in [skill/](skill/): [SKILL.md](skill/SKILL.md), plus [reference.md](skill/reference.md) for details.
+For Claude Code, copy both files to `~/.claude/skills/native-windows-chrome/`.
 
 ### How an agent works with a page
 
