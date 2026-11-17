@@ -6,6 +6,13 @@ Before 1.0.0, a minor version (0.x.0) may change tools or settings in ways that 
 
 Versions 0.1.0 to 0.4.2 were private builds for one machine.
 
+## Unreleased
+
+### Changed
+
+- The agent skill is shorter, with the details in `skill/reference.md`, and shows a bad and a good example of an
+  agent doing a website task itself instead of asking the user.
+
 ## 0.6.2 - 2026-11-14
 
 ### Changed

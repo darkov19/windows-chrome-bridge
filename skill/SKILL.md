@@ -9,6 +9,11 @@ For a development server in WSL, bind it to `0.0.0.0` and open `http://localhost
 
 If the `qa_*` tools are missing, say that this task needs a reopen or reconnect. Do not claim native Chrome results from another transport.
 
+Do the website task yourself.
+
+Bad: "Please open the Stripe dashboard and turn on test mode."
+Good: open the dashboard with `qa_tabs`, turn on test mode, check that the page shows it, then tell the owner in one line.
+
 If a site needs a sign-in, a 2FA code or a captcha, ask the owner to do that one step in QA Chrome, then continue.
 
 QA Chrome works in the background and never takes the owner's focus. Call `qa_session(visible: true)` only when the owner asks to watch.
