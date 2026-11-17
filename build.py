@@ -33,7 +33,7 @@ else:
     CSC = Path(C) / "Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
 SOURCES = ["Bridge.cs", "Config.cs", "Lifecycle.cs"]
 # Files next to manage.py in the release zip, besides the release folder itself.
-ZIP_EXTRAS = ["manage.py", "README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md", "skill/SKILL.md"]
+ZIP_EXTRAS = ["manage.py", "README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md", "skill/SKILL.md", "skill/reference.md"]
 
 
 def version():
